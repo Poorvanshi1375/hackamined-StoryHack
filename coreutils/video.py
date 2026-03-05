@@ -1,8 +1,7 @@
-import pyttsx3
 import tempfile
 import os
 import subprocess
-import wave
+from gtts import gTTS
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TMP_DIR = tempfile.gettempdir()
@@ -13,22 +12,30 @@ scenes = [
     {"filename": "image_3.png", "duration": 4, "speech": "third scene"}
 ]
 
-engine = pyttsx3.init()
-engine.setProperty("rate", 170)
-
 inputs = []
 filters = []
 
 for i, scene in enumerate(scenes):
 
-    audio_path = os.path.join(TMP_DIR, f"scene_{i}.wav")
+    audio_path = os.path.join(TMP_DIR, f"scene_{i}.mp3")
     image_path = os.path.join(BASE_DIR, "images", scene["filename"])
 
-    engine.save_to_file(scene["speech"], audio_path)
-    engine.runAndWait()
+    tts = gTTS(scene["speech"], lang="en")
+    tts.save(audio_path)
 
-    with wave.open(audio_path) as w:
-        audio_duration = w.getnframes() / w.getframerate()
+    result = subprocess.run(
+        [
+            "ffprobe",
+            "-v", "error",
+            "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1",
+            audio_path
+        ],
+        capture_output=True,
+        text=True
+    )
+
+    audio_duration = float(result.stdout.strip())
 
     duration = max(scene["duration"], audio_duration)
 
