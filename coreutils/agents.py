@@ -6,6 +6,7 @@ from prompts import SCENE_GENERATION_PROMPT, GROUNDING_PROMPT, EDIT_PROMPT
 from image_gen import generate_image
 from schemas import SceneList, SceneEdit
 from logger import log_storyboard_version
+from video_gen import generate_video
 
 llm = ChatGroq(
     model="openai/gpt-oss-120b",  # VALID GROQ MODELS: llama3-70b-8192, llama3-8b-8192, mixtral-8x7b-32768
@@ -21,7 +22,8 @@ def scene_generation_agent(state: VideoState) -> VideoState:
     chain = prompt | structured_llm
 
     response = chain.invoke({
-        "document": state["document"]
+        "document": state["document"],
+        "level_of_explanation": state.get("level_of_explanation", "basic")
     })
 
     state["scenes"] = [scene.model_dump() for scene in response.scenes]
@@ -82,9 +84,16 @@ def hitl_agent(state: VideoState) -> VideoState:
         print("Visual   :", scene["visual_description"])
         print("Image    :", state["images"].get(scene["scene_id"], "N/A"))
 
-    scene_id = int(input("\nEnter scene number to edit (0 to approve all & finish): "))
+    scene_id = int(input("\nEnter scene number to edit (0 to approve all & generate video): "))
 
     if scene_id == 0:
+        # Generate the final video before finishing
+        print("\n[HITL] Approved! Starting video generation…")
+        try:
+            video_path = generate_video()
+            print(f"[HITL] Video ready: {video_path}")
+        except Exception as e:
+            print(f"[HITL] Video generation failed: {e}")
         # Signal no edit needed — conditional edge will route to END
         state["edit_scene_id"] = None
         return state
@@ -93,7 +102,6 @@ def hitl_agent(state: VideoState) -> VideoState:
 
     state["edit_scene_id"] = scene_id
     state["edit_request"] = request
-    state["generate_video"] = True
 
     return state
 

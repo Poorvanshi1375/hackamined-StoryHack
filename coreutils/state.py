@@ -16,3 +16,4 @@ class VideoState(TypedDict):
     images: Dict[int, str]
     edit_request: str
     edit_scene_id: Optional[int]
+    level_of_explanation: str  # "basic", "detailed", or "expert"

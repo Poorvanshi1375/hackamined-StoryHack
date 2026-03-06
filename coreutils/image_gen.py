@@ -1,3 +1,52 @@
+# import base64
+# import os
+# from openai import OpenAI
+# from dotenv import load_dotenv
+
+# load_dotenv()
+
+# client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+# GLOBAL_STYLE = """
+# clean scientific infographic style,
+# minimal colors,
+# professional academic presentation,
+# consistent visual theme
+# """
+
+
+# def generate_image(prompt, scene_id):
+#     print(f"      Calling OpenAI image API for scene {scene_id}...")
+
+#     full_prompt = f"{GLOBAL_STYLE}. {prompt}"
+
+#     try:
+#         result = client.images.generate(
+#             model="gpt-image-1",
+#             prompt=full_prompt,
+#             size="1024x1024"
+#         )
+#     except Exception as e:
+#         print(f"      [ERROR] OpenAI image API call failed: {e}")
+#         raise
+
+#     image_base64 = result.data[0].b64_json
+
+#     if image_base64 is None:
+#         print("      [ERROR] b64_json is None — gpt-image-1 may have returned a URL instead.")
+#         print("      Try switching to dall-e-3 which is more widely available.")
+#         raise ValueError(f"No base64 image returned for scene {scene_id}. Full response: {result}")
+
+#     image_bytes = base64.b64decode(image_base64)
+
+#     path = f"scene_{scene_id}.png"
+
+#     with open(path, "wb") as f:
+#         f.write(image_bytes)
+
+#     return path
+
+
 import base64
 import os
 import requests

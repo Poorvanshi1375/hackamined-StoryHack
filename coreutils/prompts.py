@@ -7,16 +7,18 @@ Given the following research document:
 
 Create a storyboard for a short explainer video.
 
+Keep the level of explanation {level_of_explanation}.
+
 Rules:
 - Decide the number of scenes dynamically (MAXIMUM ALLOWED SCENES: 2)
 - Each scene must contain:
     scene_id
     title
-    script
-    visual (visual description)
+    script (a actual script about the scene which can be used for voiceover)
+    visual_description (visual description)
     duration (seconds)
 
-Make sure the scenes are logically ordered.
+Make sure the scenes are logically ordered and the script aligns well with the scene.
 
 Respond in JSON using this exact structure:
 {{"scenes": [{{"scene_id": 1, "title": "...", "script": "...", "visual_description": "...", "duration": 30}}]}}

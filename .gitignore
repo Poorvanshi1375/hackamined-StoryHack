@@ -210,3 +210,8 @@ __marimo__/
 images
 output.mp4
 temp.py
+storyboard_log.json
+tmp_audio
+*.pptx
+output_video.mp4
+paper.txt
