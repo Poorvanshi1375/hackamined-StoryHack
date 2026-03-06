@@ -73,6 +73,38 @@ export const VIDEO_URL = `${BASE}/video`
 /** Helper to build an image URL from its relative path returned by the API. */
 export function imageUrl(path) {
     if (!path || path === 'N/A') return null
-    // path is like "images/scene_1.png" — serve through FastAPI static mount
+    // path is like "images/scene_1_v1.png" — serve through FastAPI static mount
     return `${BASE}/${path}`
+}
+
+/**
+ * Get all available versions for a scene and the currently active one.
+ * @param {number} sceneId
+ * @returns {{ scene_id, available_versions, active_version }}
+ */
+export async function getSceneVersions(sceneId) {
+    const res = await fetch(`${BASE}/scenes/${sceneId}/versions`)
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }))
+        throw new Error(err.detail ?? 'Failed to fetch versions')
+    }
+    return res.json()
+}
+
+/**
+ * Set the active version for a scene.
+ * @param {number} sceneId
+ * @param {number} version
+ */
+export async function setSceneVersion(sceneId, version) {
+    const res = await fetch(`${BASE}/scenes/${sceneId}/set-version`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ version }),
+    })
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }))
+        throw new Error(err.detail ?? 'Failed to set version')
+    }
+    return res.json()
 }

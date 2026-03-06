@@ -29,3 +29,29 @@ class StoryboardResponse(BaseModel):
 
 class ApproveResponse(BaseModel):
     video_path: str
+
+
+# ── Scene versioning models ──────────────────────────────────────────────────
+
+
+class SetVersionRequest(BaseModel):
+    version: int
+
+
+class SceneVersionContent(BaseModel):
+    title: str
+    script: str
+    visual_description: str
+    duration: int
+
+
+class SceneVersionsResponse(BaseModel):
+    scene_id: int
+    available_versions: List[int]
+    active_version: int
+    version_data: Dict[str, "SceneVersionContent"] = {}
+
+
+class SceneStateResponse(BaseModel):
+    # keys are stringified scene_ids (JSON only allows string keys)
+    versions: Dict[str, int]

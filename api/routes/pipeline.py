@@ -64,6 +64,8 @@ async def start_pipeline(
     # ── Initialise global state ─────────────────────────────────────────────
     clear_log()
     state_store.pipeline_state.clear()
+    state_store.active_scene_versions.clear()
+    state_store.scene_version_counter.clear()
     state_store.pipeline_state.update(
         {
             "document": document_text,
@@ -90,6 +92,27 @@ async def start_pipeline(
         raise HTTPException(status_code=500, detail=f"Pipeline error: {exc}")
 
     state_store.pipeline_state.update(state)
+
+    # ── Rename initial images + record v1 content per scene ──────────────────
+    for scene in state_store.pipeline_state["scenes"]:
+        sid = scene["scene_id"]
+        raw_path = state_store.pipeline_state["images"].get(
+            sid, f"images/scene_{sid}.png"
+        )
+        v1_path = f"images/scene_{sid}_v1.png"
+        if os.path.isfile(raw_path) and raw_path != v1_path:
+            os.rename(raw_path, v1_path)
+        state_store.pipeline_state["images"][sid] = v1_path
+        state_store.active_scene_versions[sid] = 1
+        state_store.scene_version_counter[sid] = 1
+        # Store the v1 scene content so the UI can show it when reverting
+        state_store.scene_version_data.setdefault(sid, {})[1] = {
+            "title": scene["title"],
+            "script": scene["script"],
+            "visual_description": scene["visual_description"],
+            "duration": scene["duration"],
+        }
+        print(f"[API] Scene {sid} → {v1_path} (v1)")
 
     scenes_out = _scenes_with_images(
         state_store.pipeline_state["scenes"],
@@ -157,7 +180,9 @@ async def approve_storyboard():
     print("[API] Video rendering started")
 
     try:
-        video_path = generate_video()
+        video_path = generate_video(
+            active_versions=state_store.active_scene_versions or None
+        )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Video generation failed: {exc}")
 
