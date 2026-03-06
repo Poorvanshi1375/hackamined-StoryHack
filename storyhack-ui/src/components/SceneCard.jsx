@@ -3,22 +3,39 @@ import {
   editScene,
   getSceneVersions,
   setSceneVersion,
-  imageUrl,
   getVoices,
   setSceneVoice,
 } from "../api.js";
 
-export default function SceneCard({ scene, onUpdated, isSelected, onToggle }) {
+const BASE_API = "http://localhost:8000";
+
+/**
+ * SceneCard — Canva-style two-column scene workspace.
+ * Props:
+ *  scene        — scene data object
+ *  onUpdated    — callback to trigger storyboard refresh
+ *  isSelected   — whether this scene is included in video
+ *  onToggle     — toggle include/exclude
+ *  voice        — currently selected voice (from parent centralized state)
+ *  onVoiceChange — callback(sceneId, voice)
+ */
+export default function SceneCard({
+  scene,
+  onUpdated,
+  isSelected,
+  onToggle,
+  voice,
+  onVoiceChange,
+}) {
   const [editText, setEditText] = useState("");
   const [editing, setEditing] = useState(false);
   const [editError, setEditError] = useState("");
 
   const [voices, setVoices] = useState([]);
-  const [selectedVoice, setSelectedVoice] = useState("en-US-AriaNeural"); // Default
   const [previewState, setPreviewState] = useState("idle"); // idle | loading | playing
   const audioRef = useRef(null);
 
-  // Fetch voices once
+  // Fetch available voices once
   useEffect(() => {
     getVoices()
       .then((data) => {
@@ -28,27 +45,19 @@ export default function SceneCard({ scene, onUpdated, isSelected, onToggle }) {
   }, []);
 
   async function handlePreviewAudio() {
-    if (previewState !== "idle") return; // Prevent multiple clicks
-
+    if (previewState !== "idle") return;
     setPreviewState("loading");
     try {
-      const BASE_API = "http://localhost:8000";
       const response = await fetch(
         `${BASE_API}/scenes/${scene.scene_id}/preview-audio`,
       );
-
-      if (!response.ok) {
-        throw new Error("Failed to generate audio");
-      }
-
+      if (!response.ok) throw new Error("Failed to generate audio");
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
       audioRef.current = audio;
-
       audio.onended = () => setPreviewState("idle");
       audio.onerror = () => setPreviewState("idle");
-
       setPreviewState("playing");
       await audio.play();
     } catch (err) {
@@ -57,44 +66,13 @@ export default function SceneCard({ scene, onUpdated, isSelected, onToggle }) {
     }
   }
 
-  async function handlePreviewAudio() {
-    if (previewState !== "idle") return; // Prevent multiple clicks
-
-    setPreviewState("loading");
-    try {
-      const BASE_API = "http://localhost:8000";
-      const response = await fetch(
-        `${BASE_API}/scenes/${scene.scene_id}/preview-audio`,
-      );
-
-      if (!response.ok) {
-        throw new Error("Failed to generate audio");
-      }
-
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      audioRef.current = audio;
-
-      audio.onended = () => setPreviewState("idle");
-      audio.onerror = () => setPreviewState("idle");
-
-      setPreviewState("playing");
-      await audio.play();
-    } catch (err) {
-      console.error("Preview audio error:", err);
-      setPreviewState("idle");
-    }
-  }
-
-  // Version state
+  // ── Version state ──────────────────────────────────────────────────────────
   const [availableVersions, setAvailableVersions] = useState([]);
   const [activeVersion, setActiveVersion] = useState(null);
-  const [versionData, setVersionData] = useState({}); // {version: {title,script,visual_description,duration}}
+  const [versionData, setVersionData] = useState({});
   const [switchingTo, setSwitchingTo] = useState(null);
   const [versionError, setVersionError] = useState("");
 
-  // Fetch available versions when the scene mounts / refreshes
   useEffect(() => {
     getSceneVersions(scene.scene_id)
       .then((data) => {
@@ -105,7 +83,6 @@ export default function SceneCard({ scene, onUpdated, isSelected, onToggle }) {
       .catch(() => {});
   }, [scene.scene_id, scene._ts]);
 
-  // ── Switch version ──────────────────────────────────────────────────────
   async function handleVersionSwitch(version) {
     if (version === activeVersion || switchingTo !== null) return;
     setSwitchingTo(version);
@@ -121,7 +98,7 @@ export default function SceneCard({ scene, onUpdated, isSelected, onToggle }) {
     }
   }
 
-  // Derive displayed content from the selected version (fallback to scene props)
+  // Derive displayed content from active version or fallback to scene props
   const vContent = (activeVersion && versionData[String(activeVersion)]) || {
     title: scene.title,
     script: scene.script,
@@ -129,7 +106,7 @@ export default function SceneCard({ scene, onUpdated, isSelected, onToggle }) {
     duration: scene.duration,
   };
 
-  // ── Apply edit ──────────────────────────────────────────────────────────
+  // ── Apply scene edit ────────────────────────────────────────────────────────
   async function handleEdit() {
     if (!editText.trim()) return;
     setEditing(true);
@@ -137,7 +114,7 @@ export default function SceneCard({ scene, onUpdated, isSelected, onToggle }) {
     try {
       await editScene(scene.scene_id, editText);
       setEditText("");
-      onUpdated(); // triggers re-fetch which re-runs this card's useEffect too
+      onUpdated();
     } catch (err) {
       setEditError(err.message);
     } finally {
@@ -145,210 +122,237 @@ export default function SceneCard({ scene, onUpdated, isSelected, onToggle }) {
     }
   }
 
-  // Build image URL:
-  // - If we know the active version, construct the versioned path directly.
-  // - Fall back to scene.image (from storyboard log) as a safety net.
-  const BASE_API = "http://localhost:8000";
+  // Cache-busted image URL
   const imgSrc = activeVersion
-    ? `${BASE_API}/images/scene_${scene.scene_id}_v${activeVersion}.png?t=${scene._ts ?? 0}_v${activeVersion}`
+    ? `${BASE_API}/images/scene_${scene.scene_id}_v${activeVersion}.png?t=${scene._ts ?? 0}`
     : scene.image && scene.image !== "N/A"
       ? `${BASE_API}/${scene.image}?t=${scene._ts ?? 0}`
       : null;
 
+  const selectedVoice = voice || "en-US-AriaNeural";
+
   return (
-    <div
-      className={`bg-white rounded-2xl shadow-md overflow-hidden flex flex-col transition-opacity duration-200 ${!isSelected ? "opacity-50 grayscale-[20%]" : "opacity-100"}`}
-    >
-      {/* ── Scene image ── */}
-      {imgSrc ? (
-        <img
-          src={imgSrc}
-          alt={`Scene ${scene.scene_id}`}
-          className="w-full h-52 object-cover"
-          onError={(e) => {
-            e.currentTarget.style.display = "none";
-          }}
-        />
-      ) : (
-        <div className="w-full h-52 bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
-          <svg
-            className="w-12 h-12 text-indigo-300"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={1.5}
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909M2.25 18h19.5M3.75 4.5h16.5A1.5 1.5 0 0 1 21.75 6v12a1.5 1.5 0 0 1-1.5 1.5H3.75A1.5 1.5 0 0 1 2.25 18V6A1.5 1.5 0 0 1 3.75 4.5z"
-            />
-          </svg>
-        </div>
-      )}
-
-      <div className="p-4 flex flex-col gap-3 flex-1">
-        {/* ── Header row ── */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <label className="flex items-center gap-1.5 cursor-pointer group">
-              <input
-                type="checkbox"
-                checked={isSelected}
-                onChange={onToggle}
-                className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500 cursor-pointer"
-              />
-              <span className="text-xs font-medium text-gray-600 group-hover:text-gray-900 transition-colors">
-                Include in video
-              </span>
-            </label>
-            <span className="text-xs font-semibold uppercase tracking-wider text-blue-500 bg-blue-50 px-2 py-0.5 rounded-full ml-1">
-              Scene {scene.scene_id}
-            </span>
-          </div>
-          <span className="text-xs text-gray-400">⏱ {vContent.duration}s</span>
-        </div>
-
-        {/* ── Version selector ── */}
-        {availableVersions.length > 0 && (
-          <div className="space-y-1.5">
-            <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">
-              Image version
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {availableVersions.map((v) => {
-                const isActive = v === activeVersion;
-                const isLoading = v === switchingTo;
-                return (
-                  <button
-                    key={v}
-                    onClick={() => handleVersionSwitch(v)}
-                    disabled={isActive || switchingTo !== null}
-                    title={isActive ? `v${v} — active` : `Switch to v${v}`}
-                    className={`text-xs px-2.5 py-1 rounded-full font-semibold border transition-all
-                      ${
-                        isLoading
-                          ? "border-indigo-300 bg-indigo-50 text-indigo-400 cursor-wait"
-                          : isActive
-                            ? "border-indigo-500 bg-indigo-500 text-white cursor-default shadow-sm"
-                            : "border-gray-200 bg-gray-50 text-gray-500 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-600 active:scale-95"
-                      }`}
-                  >
-                    {isLoading ? (
-                      <span className="flex items-center gap-1">
-                        <svg
-                          className="w-2.5 h-2.5 spin"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth={3}
-                        >
-                          <path strokeLinecap="round" d="M12 3a9 9 0 1 0 9 9" />
-                        </svg>
-                        v{v}
-                      </span>
-                    ) : (
-                      <>
-                        v{v}
-                        {isActive && " ✓"}
-                      </>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-            {versionError && (
-              <p className="text-xs text-red-500">{versionError}</p>
-            )}
+    <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-6 items-start h-full">
+      {/* ── CENTER: Square Image ── */}
+      <div className="relative w-full aspect-square bg-gray-100 rounded-xl overflow-hidden border border-gray-200 shadow-inner flex items-center justify-center">
+        {imgSrc ? (
+          <img
+            src={imgSrc}
+            alt={`Scene ${scene.scene_id}`}
+            className="w-full h-full object-cover"
+            onError={(e) => {
+              e.currentTarget.style.display = "none";
+            }}
+          />
+        ) : (
+          <div className="text-gray-400 text-xs font-medium tracking-wide">
+            Generating Image...
           </div>
         )}
 
-        {/* ── Title ── */}
-        <h3 className="font-semibold text-gray-800 text-sm leading-snug">
-          {vContent.title}
+        {/* Version pills — do not redesign per instructions */}
+        {availableVersions.length > 0 && (
+          <div className="absolute top-2 left-2 flex flex-wrap gap-1.5">
+            {availableVersions.map((v) => {
+              const isActive = v === activeVersion;
+              const isLoading = v === switchingTo;
+              return (
+                <button
+                  key={v}
+                  onClick={() => handleVersionSwitch(v)}
+                  disabled={isActive || switchingTo !== null}
+                  title={isActive ? `v${v} — active` : `Switch to v${v}`}
+                  className={`text-[11px] px-2.5 py-1 rounded-full font-bold shadow-sm border transition-all
+                    ${
+                      isLoading
+                        ? "bg-indigo-50 text-indigo-400 border-indigo-200 cursor-wait"
+                        : isActive
+                          ? "bg-blue-600 text-white border-blue-600 cursor-default"
+                          : "bg-white text-gray-600 border-gray-300 hover:bg-blue-50 hover:border-blue-300 active:scale-95"
+                    }`}
+                >
+                  {isLoading ? (
+                    <span className="flex items-center gap-1">
+                      <svg
+                        className="w-2.5 h-2.5 spin"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth={3}
+                      >
+                        <path strokeLinecap="round" d="M12 3a9 9 0 1 0 9 9" />
+                      </svg>
+                      v{v}
+                    </span>
+                  ) : (
+                    <>
+                      v{v}
+                      {isActive && " ✓"}
+                    </>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+        {versionError && (
+          <div className="absolute bottom-2 left-2 text-[11px] text-red-600 bg-white/90 px-2 py-1 rounded-lg font-medium shadow-sm border border-red-100">
+            {versionError}
+          </div>
+        )}
+      </div>
+
+      {/* ── RIGHT: Scene Control Panel ── */}
+      <div className="flex flex-col gap-4 overflow-y-auto max-h-[600px] pr-1">
+        {/* Title */}
+        <h3 className="text-lg font-bold text-gray-900 leading-tight">
+          {vContent.title || `Scene ${scene.scene_id}`}
         </h3>
 
-        {/* ── Script ── */}
-        <div className="flex flex-col gap-2">
-          <p className="text-sm text-gray-600 leading-relaxed border-l-2 border-blue-200 pl-3">
-            {vContent.script}
+        {/* Include in video checkbox */}
+        <label className="flex items-center gap-2.5 cursor-pointer w-fit group">
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={onToggle}
+            className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer"
+          />
+          <span className="text-sm font-semibold text-gray-700 group-hover:text-blue-600 transition-colors">
+            Include in final video
+          </span>
+        </label>
+
+        <hr className="border-gray-100" />
+
+        {/* Narration Script */}
+        <div className="space-y-1">
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+            Narration Script
           </p>
-
-          <div className="flex items-center gap-2 mt-1">
-            <span className="text-xs text-gray-500 font-medium">VOICE:</span>
-            <select
-              value={selectedVoice}
-              onChange={async (e) => {
-                const v = e.target.value;
-                setSelectedVoice(v);
-                try {
-                  await setSceneVoice(scene.scene_id, v);
-                } catch (err) {
-                  console.error("Voice set error", err);
-                }
-              }}
-              disabled={voices.length === 0}
-              className="text-xs border border-gray-200 rounded px-2 py-1 bg-white text-gray-700 outline-none focus:border-indigo-400 font-medium cursor-pointer"
-            >
-              {voices.map((v) => (
-                <option key={v} value={v}>
-                  {v
-                    .replace("en-US-", "")
-                    .replace("en-GB-", "")
-                    .replace("Neural", "")}{" "}
-                  ({v})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <button
-            onClick={handlePreviewAudio}
-            disabled={previewState !== "idle"}
-            className={`self-start flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-full transition-all border ${
-              previewState === "loading"
-                ? "bg-yellow-50 text-yellow-600 border-yellow-200 cursor-wait shadow-sm"
-                : previewState === "playing"
-                  ? "bg-green-50 text-green-600 border-green-200 shadow-inner"
-                  : "bg-indigo-50 text-indigo-600 border-indigo-200 hover:bg-indigo-100 hover:text-indigo-700 active:scale-95 shadow-sm"
-            }`}
-          >
-            {previewState === "idle" && "🔊 Preview Audio"}
-            {previewState === "loading" && "⏳ Generating..."}
-            {previewState === "playing" && "▶ Playing"}
-          </button>
+          <p className="text-sm text-gray-700 leading-relaxed bg-blue-50/60 border border-blue-100 rounded-lg px-3 py-2.5 italic">
+            "{vContent.script}"
+          </p>
         </div>
 
-        {/* ── Visual description (collapsible) ── */}
-        <details className="text-xs text-gray-400 cursor-pointer">
-          <summary className="font-medium text-gray-500 hover:text-gray-700 transition-colors">
-            Visual description
+        {/* Voice + Preview */}
+        <div className="space-y-1">
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+            Voice
+          </p>
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <select
+                value={selectedVoice}
+                onChange={async (e) => {
+                  const v = e.target.value;
+                  onVoiceChange(scene.scene_id, v);
+                  try {
+                    await setSceneVoice(scene.scene_id, v);
+                  } catch (err) {
+                    console.error("Voice set error", err);
+                  }
+                }}
+                disabled={voices.length === 0}
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white text-gray-700 outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 cursor-pointer shadow-sm appearance-none"
+              >
+                {voices.map((v) => (
+                  <option key={v} value={v}>
+                    {v
+                      .replace("en-US-", "")
+                      .replace("en-GB-", "")
+                      .replace("Neural", "")}{" "}
+                    ({v})
+                  </option>
+                ))}
+              </select>
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-400">
+                <svg
+                  className="w-3.5 h-3.5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 9l-7 7-7-7"
+                  />
+                </svg>
+              </div>
+            </div>
+            <button
+              onClick={handlePreviewAudio}
+              disabled={previewState !== "idle"}
+              className={`flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-lg border transition-all text-sm shadow-sm
+                ${
+                  previewState === "loading"
+                    ? "bg-yellow-50 text-yellow-600 border-yellow-200 cursor-wait"
+                    : previewState === "playing"
+                      ? "bg-green-50 text-green-600 border-green-200"
+                      : "bg-white text-blue-600 border-gray-200 hover:bg-blue-50 hover:border-blue-300 active:scale-95"
+                }`}
+              title="Preview Audio"
+            >
+              {previewState === "idle" && "🔊"}
+              {previewState === "loading" && "⏳"}
+              {previewState === "playing" && "▶"}
+            </button>
+          </div>
+        </div>
+
+        {/* Visual Description (collapsible) */}
+        <details className="group border border-gray-200 rounded-lg bg-gray-50 [&_summary::-webkit-details-marker]:hidden">
+          <summary className="flex items-center justify-between px-3 py-2 cursor-pointer outline-none">
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+              Visual Description
+            </span>
+            <svg
+              className="w-3.5 h-3.5 text-gray-400 transition-transform group-open:rotate-180"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M19 9l-7 7-7-7"
+              />
+            </svg>
           </summary>
-          <p className="mt-1 leading-relaxed">{vContent.visual_description}</p>
+          <p className="px-3 pb-3 pt-1 text-xs text-gray-600 leading-relaxed border-t border-gray-200">
+            {vContent.visual_description}
+          </p>
         </details>
 
-        {/* ── Edit box ── */}
-        <div className="mt-auto pt-2 border-t border-gray-100 space-y-2">
+        {/* Scene Edit Prompt */}
+        <div className="space-y-2 pt-1">
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+            Scene Edit Prompt
+          </p>
           <textarea
             rows={2}
-            placeholder="Describe your edit (e.g. 'shorten this', 'add an example')…"
+            placeholder="e.g., 'Shorten this scene', 'add a diagram'"
             value={editText}
             onChange={(e) => setEditText(e.target.value)}
-            className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-blue-300 placeholder-gray-300"
+            className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-blue-400 shadow-sm"
           />
-          {editError && <p className="text-xs text-red-500">{editError}</p>}
+          {editError && (
+            <p className="text-xs text-red-500 font-medium">{editError}</p>
+          )}
           <button
             onClick={handleEdit}
             disabled={editing || !editText.trim()}
-            className={`w-full py-1.5 text-sm font-medium rounded-lg transition-all
+            className={`w-full py-2 text-sm font-semibold rounded-lg transition-all shadow-sm
               ${
                 editing || !editText.trim()
-                  ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                  : "bg-indigo-600 hover:bg-indigo-700 text-white active:scale-[0.98]"
+                  ? "bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed"
+                  : "bg-blue-600 text-white hover:bg-blue-700 active:scale-[0.98]"
               }`}
           >
             {editing ? (
-              <span className="flex items-center justify-center gap-1.5">
+              <span className="flex items-center justify-center gap-2">
                 <svg
                   className="w-3.5 h-3.5 spin"
                   viewBox="0 0 24 24"
@@ -358,10 +362,10 @@ export default function SceneCard({ scene, onUpdated, isSelected, onToggle }) {
                 >
                   <path strokeLinecap="round" d="M12 3a9 9 0 1 0 9 9" />
                 </svg>
-                Applying…
+                Regenerating...
               </span>
             ) : (
-              "Apply Edit"
+              "Regenerate Scene"
             )}
           </button>
         </div>

@@ -6,13 +6,27 @@ import {
   getStoryboard,
   generateVideo,
 } from "./api.js";
+import Stepper from "./components/Stepper.jsx";
 import UploadPanel from "./components/UploadPanel.jsx";
 import SummaryReview from "./components/SummaryReview.jsx";
 import StoryboardView from "./components/StoryboardView.jsx";
 import VideoPanel from "./components/VideoPanel.jsx";
 
 // Stages: 'upload' | 'summary' | 'scenes' | 'video'
-const STAGES = { UPLOAD: "upload", SUMMARY: "summary", SCENES: "scenes" };
+const STAGES = {
+  UPLOAD: "upload",
+  SUMMARY: "summary",
+  SCENES: "scenes",
+  VIDEO: "video",
+};
+
+const STEP_LABELS = ["Upload", "Summary", "Scenes", "Video"];
+const STAGE_TO_STEP = {
+  [STAGES.UPLOAD]: 0,
+  [STAGES.SUMMARY]: 1,
+  [STAGES.SCENES]: 2,
+  [STAGES.VIDEO]: 3,
+};
 
 export default function App() {
   const [stage, setStage] = useState(STAGES.UPLOAD);
@@ -20,14 +34,21 @@ export default function App() {
   // Per-stage state
   const [uploadedFile, setUploadedFile] = useState(null);
   const [uploadedLevel, setUploadedLevel] = useState("basic");
-  const [documentText, setDocumentText] = useState(""); // cached from server
 
   const [summary, setSummary] = useState("");
   const [coreFocus, setCoreFocus] = useState("");
 
   const [scenes, setScenes] = useState([]);
-  const [selectedScenes, setSelectedScenes] = useState([]); // Array of selected scene IDs
-  const [videoReady, setVideoReady] = useState(false);
+  // selectedScenes: array of scene IDs that are included in video
+  const [selectedScenes, setSelectedScenes] = useState([]);
+
+  // ── Centralized per-scene state ─────────────────────────────────────────────
+  // sceneVoices: { [sceneId]: voiceString }
+  const [sceneVoices, setSceneVoices] = useState({});
+
+  function handleVoiceChange(sceneId, voice) {
+    setSceneVoices((prev) => ({ ...prev, [sceneId]: voice }));
+  }
 
   // Loading / error per phase
   const [loadingSummary, setLoadingSummary] = useState(false);
@@ -37,7 +58,7 @@ export default function App() {
   const [scenesError, setScenesError] = useState("");
   const [videoError, setVideoError] = useState("");
 
-  // ── Stage 1: Upload → generate summary ────────────────────────────────────
+  // ── Stage 1: Upload → generate summary ─────────────────────────────────────
   async function handleUpload(file, level) {
     setUploadedFile(file);
     setUploadedLevel(level);
@@ -47,15 +68,11 @@ export default function App() {
     setCoreFocus("");
     setScenes([]);
     setSelectedScenes([]);
-    setVideoReady(false);
+    setSceneVoices({});
     try {
       const data = await generateSummary(file, level);
       setSummary(data.summary);
       setCoreFocus(data.core_focus);
-      // The API stores doc text in pipeline_state; we also need it for /approve.
-      // We send an empty string — the server uses its own pipeline_state copy.
-      // Store a sentinel so approve knows the server has the doc already.
-      setDocumentText("__server_cached__");
       setStage(STAGES.SUMMARY);
     } catch (err) {
       setSummaryError(err.message);
@@ -64,7 +81,7 @@ export default function App() {
     }
   }
 
-  // ── Stage 2a: Refine summary ───────────────────────────────────────────────
+  // ── Stage 2a: Refine summary ────────────────────────────────────────────────
   async function handleRefine(currentSummary, currentFocus, editRequest) {
     const data = await refineSummary(currentSummary, currentFocus, editRequest);
     setSummary(data.summary);
@@ -72,7 +89,7 @@ export default function App() {
     return data;
   }
 
-  // ── Stage 2b: Regenerate summary (re-upload same file) ────────────────────
+  // ── Stage 2b: Regenerate summary ───────────────────────────────────────────
   async function handleRegenerate() {
     if (!uploadedFile) return;
     setLoadingSummary(true);
@@ -88,13 +105,11 @@ export default function App() {
     }
   }
 
-  // ── Stage 2c: Approve summary → run scene pipeline ────────────────────────
+  // ── Stage 2c: Approve summary → run scene pipeline ─────────────────────────
   async function handleApproveSummary(approvedSummary, approvedFocus) {
     setLoadingScenes(true);
     setScenesError("");
     try {
-      // Server already has the document text — pass empty string as placeholder;
-      // the /summary/approve endpoint uses pipeline_state.document set by /generate.
       const data = await approveSummary(
         "",
         approvedSummary,
@@ -113,18 +128,18 @@ export default function App() {
     }
   }
 
-  // ── Stage 3a: Scene edited — refresh storyboard ───────────────────────────
+  // ── Stage 3a: Scene edited — refresh storyboard ────────────────────────────
   async function handleSceneUpdated() {
     try {
       const data = await getStoryboard();
       const ts = Date.now();
       setScenes(data.scenes.map((s) => ({ ...s, _ts: ts })));
     } catch {
-      // Storyboard fetch failed — scenes already updated locally, no crash
+      // Storyboard fetch failed silently
     }
   }
 
-  // ── Stage 3b: Toggle scene selection ────────────────────────────────────
+  // ── Stage 3b: Toggle scene selection ───────────────────────────────────────
   function handleToggleSceneSelection(sceneId) {
     setSelectedScenes((prev) =>
       prev.includes(sceneId)
@@ -133,14 +148,17 @@ export default function App() {
     );
   }
 
-  // ── Stage 3c: Generate video ──────────────────────────────────────────────
+  // ── Stage 3c: Generate video ────────────────────────────────────────────────
   async function handleGenerateVideo() {
     setGeneratingVideo(true);
     setVideoError("");
     try {
-      // images mapping is handled server-side now (from cache), but model requires dict
-      await generateVideo(scenes, {}, selectedScenes);
-      setVideoReady(true);
+      // Filter excluded scenes before sending to API
+      const includedScenes = scenes.filter((s) =>
+        selectedScenes.includes(s.scene_id),
+      );
+      await generateVideo(includedScenes, {}, selectedScenes);
+      setStage(STAGES.VIDEO);
     } catch (err) {
       setVideoError(err.message);
     } finally {
@@ -148,73 +166,57 @@ export default function App() {
     }
   }
 
-  // ── Progress pill labels ───────────────────────────────────────────────────
-  const pills = [];
-  if (stage === STAGES.SUMMARY || stage === STAGES.SCENES)
-    pills.push({ label: "✓ Summary", color: "bg-purple-100 text-purple-700" });
-  if (stage === STAGES.SCENES)
-    pills.push({ label: "✓ Storyboard", color: "bg-blue-100 text-blue-700" });
-  if (videoReady)
-    pills.push({
-      label: "✓ Video ready",
-      color: "bg-green-100 text-green-700",
-    });
+  const currentStepIndex = STAGE_TO_STEP[stage] ?? 0;
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-gray-100 flex flex-col">
       {/* ── Header ── */}
       <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0">
-            <svg
-              className="w-5 h-5 text-white"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2}
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 0 1-1.125-1.125M3.375 19.5h7.5c.621 0 1.125-.504 1.125-1.125m-9.75 0V5.625m0 12.75v-1.5c0-.621.504-1.125 1.125-1.125m18.375 2.625V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-7.5A1.125 1.125 0 0 1 12 18.375m9.75-12.75c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125m19.5 0v1.5c0 .621-.504 1.125-1.125 1.125M2.25 5.625v1.5c0 .621.504 1.125 1.125 1.125m0 0h17.25m-17.25 0h7.5c.621 0 1.125.504 1.125 1.125M3.375 8.25c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m17.25-3.75h-7.5c-.621 0-1.125.504-1.125 1.125m8.625-1.125c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-1.5-3.75"
-              />
-            </svg>
-          </div>
-          <div>
-            <h1 className="text-base font-bold text-gray-900 leading-none">
-              StoryHack
-            </h1>
-            <p className="text-xs text-gray-400 mt-0.5">
-              AI Video Storyboard Generator
-            </p>
+        <div className="max-w-screen-xl mx-auto px-6 py-3 flex items-center gap-4">
+          {/* Logo */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="w-7 h-7 rounded-md bg-blue-600 flex items-center justify-center">
+              <svg
+                className="w-4 h-4 text-white"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 0 1-1.125-1.125M3.375 19.5h7.5c.621 0 1.125-.504 1.125-1.125m-9.75 0V5.625m0 12.75v-1.5c0-.621.504-1.125 1.125-1.125m18.375 2.625V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-7.5A1.125 1.125 0 0 1 12 18.375m9.75-12.75c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125m19.5 0v1.5c0 .621-.504 1.125-1.125 1.125M2.25 5.625v1.5c0 .621.504 1.125 1.125 1.125m0 0h17.25m-17.25 0h7.5c.621 0 1.125.504 1.125 1.125M3.375 8.25c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m17.25-3.75h-7.5c-.621 0-1.125.504-1.125 1.125m8.625-1.125c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-1.5-3.75"
+                />
+              </svg>
+            </div>
+            <div>
+              <h1 className="text-sm font-bold text-gray-900 leading-none">
+                StoryHack
+              </h1>
+              <p className="text-[10px] text-gray-400 mt-0.5">
+                AI Video Pipeline
+              </p>
+            </div>
           </div>
 
-          {/* Progress pills */}
-          {pills.length > 0 && (
-            <div className="ml-auto flex items-center gap-2 text-xs">
-              {pills.map((p) => (
-                <span
-                  key={p.label}
-                  className={`${p.color} px-2.5 py-1 rounded-full font-medium`}
-                >
-                  {p.label}
-                </span>
-              ))}
-            </div>
-          )}
+          {/* Stepper — centered */}
+          <div className="flex-1 flex justify-center">
+            <Stepper steps={STEP_LABELS} currentIndex={currentStepIndex} />
+          </div>
         </div>
       </header>
 
       {/* ── Main content ── */}
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-8">
-        {/* ── Stage 1: Upload ── */}
+      <main className="flex-1 max-w-screen-xl mx-auto w-full px-6 py-6 space-y-4">
+        {/* ── Stage: Upload ── */}
         {stage === STAGES.UPLOAD && (
           <>
             <UploadPanel onGenerate={handleUpload} loading={loadingSummary} />
             {loadingSummary && (
-              <div className="bg-white rounded-2xl shadow-md p-8 flex flex-col items-center gap-4">
+              <div className="bg-white rounded-xl border border-gray-200 p-8 flex flex-col items-center gap-3">
                 <svg
-                  className="w-10 h-10 text-purple-400 spin"
+                  className="w-8 h-8 text-purple-400 spin"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
@@ -222,25 +224,23 @@ export default function App() {
                 >
                   <path strokeLinecap="round" d="M12 3a9 9 0 1 0 9 9" />
                 </svg>
-                <div className="text-center">
-                  <p className="font-semibold text-gray-700">
-                    Analysing document…
-                  </p>
-                  <p className="text-xs text-gray-400 mt-1">
-                    Generating summary and core focus
-                  </p>
-                </div>
+                <p className="text-sm font-semibold text-gray-700">
+                  Analysing document…
+                </p>
+                <p className="text-xs text-gray-400">
+                  Generating summary and core focus
+                </p>
               </div>
             )}
             {summaryError && (
-              <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm">
+              <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
                 ⚠️ {summaryError}
               </div>
             )}
           </>
         )}
 
-        {/* ── Stage 2: Summary Review ── */}
+        {/* ── Stage: Summary Review ── */}
         {stage === STAGES.SUMMARY && (
           <>
             <SummaryReview
@@ -252,14 +252,14 @@ export default function App() {
               loading={loadingScenes || loadingSummary}
             />
             {(scenesError || summaryError) && (
-              <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm">
+              <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
                 ⚠️ {scenesError || summaryError}
               </div>
             )}
             {loadingScenes && (
-              <div className="bg-white rounded-2xl shadow-md p-8 flex flex-col items-center gap-4">
+              <div className="bg-white rounded-xl border border-gray-200 p-8 flex flex-col items-center gap-3">
                 <svg
-                  className="w-10 h-10 text-blue-400 spin"
+                  className="w-8 h-8 text-blue-400 spin"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
@@ -267,20 +267,18 @@ export default function App() {
                 >
                   <path strokeLinecap="round" d="M12 3a9 9 0 1 0 9 9" />
                 </svg>
-                <div className="text-center">
-                  <p className="font-semibold text-gray-700">
-                    Generating storyboard…
-                  </p>
-                  <p className="text-xs text-gray-400 mt-1">
-                    Scene generation → Grounding → Image generation
-                  </p>
-                </div>
+                <p className="text-sm font-semibold text-gray-700">
+                  Generating storyboard…
+                </p>
+                <p className="text-xs text-gray-400">
+                  Scene generation → Grounding → Image generation
+                </p>
               </div>
             )}
           </>
         )}
 
-        {/* ── Stage 3: Scenes + Video ── */}
+        {/* ── Stage: Scenes ── */}
         {stage === STAGES.SCENES && (
           <>
             {scenes.length > 0 && (
@@ -289,24 +287,54 @@ export default function App() {
                 onSceneUpdated={handleSceneUpdated}
                 selectedScenes={selectedScenes}
                 onToggleScene={handleToggleSceneSelection}
+                sceneVoices={sceneVoices}
+                onVoiceChange={handleVoiceChange}
               />
             )}
-            <VideoPanel
-              videoReady={videoReady}
-              onGenerate={handleGenerateVideo}
-              generating={generatingVideo}
-            />
-            {videoError && (
-              <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm">
-                ⚠️ {videoError}
-              </div>
-            )}
+            {/* Generate Video button on scene screen */}
+            <div className="flex justify-end gap-3">
+              {videoError && (
+                <span className="text-sm text-red-600 self-center font-medium">
+                  ⚠️ {videoError}
+                </span>
+              )}
+              <button
+                onClick={handleGenerateVideo}
+                disabled={generatingVideo || selectedScenes.length === 0}
+                className={`px-5 py-2 rounded-lg text-sm font-semibold shadow-sm transition-all
+                  ${
+                    generatingVideo || selectedScenes.length === 0
+                      ? "bg-gray-200 text-gray-400 cursor-not-allowed"
+                      : "bg-green-600 hover:bg-green-700 text-white active:scale-95"
+                  }`}
+              >
+                {generatingVideo ? (
+                  <span className="flex items-center gap-2">
+                    <svg
+                      className="w-3.5 h-3.5 spin"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={3}
+                    >
+                      <path strokeLinecap="round" d="M12 3a9 9 0 1 0 9 9" />
+                    </svg>
+                    Rendering…
+                  </span>
+                ) : (
+                  "Generate Video →"
+                )}
+              </button>
+            </div>
           </>
         )}
+
+        {/* ── Stage: Video ── */}
+        {stage === STAGES.VIDEO && <VideoPanel />}
       </main>
 
       {/* ── Footer ── */}
-      <footer className="text-center py-6 text-xs text-gray-400">
+      <footer className="text-center py-4 text-xs text-gray-400">
         StoryHack · AI Video Pipeline · Hackathon Edition
       </footer>
     </div>
