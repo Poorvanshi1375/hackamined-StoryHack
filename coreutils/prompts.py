@@ -10,7 +10,7 @@ Create a storyboard for a short explainer video.
 Keep the level of explanation {level_of_explanation}.
 
 Rules:
-- Decide the number of scenes dynamically (MAXIMUM ALLOWED SCENES: 2)
+- Decide the number of scenes dynamically (MAXIMUM ALLOWED SCENES: 1)
 - Each scene must contain:
     scene_id
     title
@@ -23,7 +23,7 @@ Make sure the scenes are logically ordered and the script aligns well with the s
 Respond in JSON using this exact structure:
 {{"scenes": [{{"scene_id": 1, "title": "...", "script": "...", "visual_description": "...", "duration": 30}}]}}
 
-NOTE: MAXIMUM SCENES ALLOWED: 2
+NOTE: MAXIMUM SCENES ALLOWED: 1
 """
 
 
@@ -55,13 +55,15 @@ A scene is shown below:
 
 {scene}
 
-User request:
+User edit request:
 {edit_request}
 
-Update only the necessary fields in the scene.
+Apply the requested change and return the COMPLETE updated scene.
 
-Maintain consistency with the existing script
-and visual structure.
+CRITICAL RULES:
+- You MUST return ALL fields, even fields you did not change.
+- Do NOT omit any field. Every field is required.
 
-Respond in JSON.
+Respond in JSON using this EXACT structure (all fields mandatory):
+{{"scene_id": <int>, "title": "...", "script": "...", "visual_description": "...", "duration": <int>}}
 """
