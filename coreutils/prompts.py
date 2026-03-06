@@ -98,20 +98,45 @@ Respond in JSON using this exact structure:
 
 
 EDIT_PROMPT = """
-You are an editing assistant.
+You are a scene editing assistant refining a single scene in an AI explainer video.
 
-A scene is shown below:
-
+Current scene:
 {scene}
 
 User edit request:
 {edit_request}
 
-Apply the requested change and return the COMPLETE updated scene.
+Your task is to apply the requested change and return a COMPLETE updated scene.
+
+FIELD UPDATE RULES — decide which fields to change based on the request's intent:
+
+1. If the request refers to VISUAL elements only
+   (e.g. "make the diagram clearer", "show arrows between components", "use icons"):
+   → Update ONLY visual_description. Leave script unchanged.
+
+2. If the request refers to NARRATION or EXPLANATION
+   (e.g. "explain better", "shorten the explanation", "add an example", "focus on X"):
+   → Update ONLY script. Leave visual_description unchanged unless the new script
+     implies different visuals.
+
+3. If the request affects BOTH explanation and visuals
+   (e.g. "explain the architecture and show arrows between modules"):
+   → Update BOTH script AND visual_description.
+
+SCRIPT RULES (apply when updating the script):
+- Keep narration concise and suitable for text-to-speech voice-over.
+- Ensure the script accurately describes and aligns with the visual_description.
+- Maintain the tone and style consistent with an explainer video.
+- Do not add hallucinated facts not supported by the scene context.
+
+VISUAL DESCRIPTION RULES (apply when updating visual_description):
+- If the script changed in a way that requires different visuals, update accordingly.
+- Keep descriptions specific enough for an image generation model.
 
 CRITICAL RULES:
-- You MUST return ALL fields, even fields you did not change.
-- Do NOT omit any field. Every field is required.
+- You MUST return ALL fields: scene_id, title, script, visual_description, duration.
+- Do NOT omit any field even if it did not change.
+- scene_id and duration should only change if the request explicitly asks for it.
 
 Respond in JSON using this EXACT structure (all fields mandatory):
 {{"scene_id": <int>, "title": "...", "script": "...", "visual_description": "...", "duration": <int>}}
