@@ -1,0 +1,30 @@
+=== Version 1 — 2026-03-06 08:24:39 | Initial Generation ===
+
+  Scene 1: Solar Energy: Benefits and Challenges
+    Duration : 45s
+    Script   : Solar power is a clean, renewable source that can cut emissions and lower electricity bills, but its adoption faces several hurdles. High upfront costs for panels, inverters and batteries make it pricey for households. The sun’s variability means no power at night or on cloudy days. Large utility farms need vast land, potentially clashing with agriculture and ecosystems. Traditional panels convert only a modest share of sunlight, and their production uses chemicals and energy, raising environmental concerns. After 25–30 years the panels become electronic waste unless recycled, and fluctuating output can strain existing grids. Finally, many people lack awareness or technical know‑how to go solar.
+    Visual   : Animated infographic opens with a bright sun over a city, then transitions to icons: a price tag, a night sky, a sprawling solar farm over fields, a low‑efficiency panel, a factory emitting fumes, a landfill of old panels, a wavy grid line, and confused people. Each icon lights up as the narrator mentions the corresponding challenge.
+    Image    : images/scene_1.png
+
+  Scene 2: Innovative Solutions and the Path Forward
+    Duration : 45s
+    Script   : These challenges are being tackled on many fronts. Government subsidies, tax credits and leasing models lower the cost barrier. Battery storage, hybrid systems and smart‑grid technology smooth out intermittency and keep the grid stable. Rooftop, floating and agrivoltaic installations reduce land conflicts. New materials like perovskite and multi‑junction cells boost efficiency. Greener manufacturing, recycling programs and recyclable designs cut environmental impact. AI‑driven forecasting and microgrids improve grid integration, while education campaigns and easy financing empower consumers. Together, these advances make solar a cornerstone of a sustainable energy future.
+    Visual   : The scene shifts to hopeful visuals: a hand receiving a subsidy check, a house with solar panels and a battery, a hybrid wind‑solar farm, floating panels on a lake, crops under solar arrays, a glowing high‑efficiency panel, a recycling loop, AI data streams balancing a grid, and a classroom with diverse people learning. The animation ends with a bright sunrise over a clean cityscape.
+    Image    : images/scene_2.png
+
+------------------------------------------------------------
+=== Version 2 — 2026-03-06 08:25:20 | Edit: Scene 1 ===
+
+  Scene 1: Solar Energy: Benefits and Challenges
+    Duration : 45s
+    Script   : Solar power is a clean, renewable source that can cut emissions and lower electricity bills, but its adoption faces several hurdles. High upfront costs for panels, inverters and batteries make it pricey for households. The sun’s variability means no power at night or on cloudy days. Large utility farms need vast land, potentially clashing with agriculture and ecosystems. Traditional panels convert only a modest share of sunlight, and their production uses chemicals and energy, raising environmental concerns. After 25–30 years the panels become electronic waste unless recycled, and fluctuating output can strain existing grids. Finally, many people lack awareness or technical know‑how to go solar.
+    Visual   : A simple illustration of a house.
+    Image    : images/scene_1.png
+
+  Scene 2: Innovative Solutions and the Path Forward
+    Duration : 45s
+    Script   : These challenges are being tackled on many fronts. Government subsidies, tax credits and leasing models lower the cost barrier. Battery storage, hybrid systems and smart‑grid technology smooth out intermittency and keep the grid stable. Rooftop, floating and agrivoltaic installations reduce land conflicts. New materials like perovskite and multi‑junction cells boost efficiency. Greener manufacturing, recycling programs and recyclable designs cut environmental impact. AI‑driven forecasting and microgrids improve grid integration, while education campaigns and easy financing empower consumers. Together, these advances make solar a cornerstone of a sustainable energy future.
+    Visual   : The scene shifts to hopeful visuals: a hand receiving a subsidy check, a house with solar panels and a battery, a hybrid wind‑solar farm, floating panels on a lake, crops under solar arrays, a glowing high‑efficiency panel, a recycling loop, AI data streams balancing a grid, and a classroom with diverse people learning. The animation ends with a bright sunrise over a clean cityscape.
+    Image    : images/scene_2.png
+
+------------------------------------------------------------
