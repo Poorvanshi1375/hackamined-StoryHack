@@ -57,9 +57,16 @@ export async function editScene(sceneId, editRequest) {
 
 /**
  * Approve the storyboard and trigger video rendering.
+ * @param {Array<Object>} scenes
+ * @param {Object} images
+ * @param {Array<number>} selectedScenes
  */
-export async function generateVideo() {
-    const res = await fetch(`${BASE}/pipeline/approve`, { method: 'POST' })
+export async function generateVideo(scenes, images, selectedScenes) {
+    const res = await fetch(`${BASE}/pipeline/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scenes, images, selected_scenes: selectedScenes }),
+    })
     if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: res.statusText }))
         throw new Error(err.detail ?? 'Video generation failed')

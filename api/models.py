@@ -27,6 +27,12 @@ class StoryboardResponse(BaseModel):
     scenes: List[SceneOut]
 
 
+class ApproveRequest(BaseModel):
+    scenes: List[Dict]
+    images: Dict[str, str]
+    selected_scenes: List[int]
+
+
 class ApproveResponse(BaseModel):
     video_path: str
 

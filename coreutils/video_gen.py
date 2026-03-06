@@ -65,11 +65,15 @@ def generate_video(
     output_path="output_video.mp4",
     tmp_dir="tmp",
     active_versions: dict = None,
+    selected_scenes: list = None,
 ):
     """
     active_versions: optional dict {scene_id: version_number}.
     When provided, image paths are resolved as images/scene_{id}_v{version}.png
     instead of using whatever path is stored in storyboard_log.json.
+
+    selected_scenes: optional list of scene_id integers.
+    If provided, only these scenes are rendered.
     """
 
     with open(storyboard_json_path, encoding="utf-8") as f:
@@ -77,6 +81,9 @@ def generate_video(
 
     latest = versions[-1]
     scenes = latest["scenes"]
+
+    if selected_scenes is not None:
+        scenes = [s for s in scenes if s["scene_id"] in selected_scenes]
 
     if not scenes:
         raise ValueError("No scenes found in storyboard.")

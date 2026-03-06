@@ -4,7 +4,13 @@ import shutil
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
-from api.models import ApproveResponse, SceneOut, StartResponse, StoryboardResponse
+from api.models import (
+    ApproveRequest,
+    ApproveResponse,
+    SceneOut,
+    StartResponse,
+    StoryboardResponse,
+)
 from api import state_store
 
 router = APIRouter(prefix="/pipeline", tags=["pipeline"])
@@ -167,7 +173,7 @@ async def get_storyboard():
 
 
 @router.post("/approve", response_model=ApproveResponse)
-async def approve_storyboard():
+async def approve_storyboard(body: ApproveRequest):
     """Generate the final MP4 video from the approved storyboard."""
     from video_gen import generate_video
 
@@ -178,10 +184,12 @@ async def approve_storyboard():
         )
 
     print("[API] Video rendering started")
+    print(f"[API] Selected scenes: {body.selected_scenes}")
 
     try:
         video_path = generate_video(
-            active_versions=state_store.active_scene_versions or None
+            active_versions=state_store.active_scene_versions or None,
+            selected_scenes=body.selected_scenes,
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Video generation failed: {exc}")
