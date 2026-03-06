@@ -1,126 +1,115 @@
-"""
-video_gen.py
-------------
-Generates a final MP4 video from scenes defined in storyboard_log.json.
-
-For each scene:
- 1. A gTTS voiceover is generated from the scene's script.
- 2. The scene's image is displayed as a still-image clip for the duration
-    of the voiceover audio.
- 3. All scene clips are concatenated into one final video file.
-
-Requirements:
-    pip install gtts moviepy pillow
-"""
-
 import os
 import json
+import subprocess
 from gtts import gTTS
-try:
-    # moviepy v2.x
-    from moviepy import ImageClip, AudioFileClip, concatenate_videoclips
-except ImportError:
-    # moviepy v1.x
-    from moviepy.editor import ImageClip, AudioFileClip, concatenate_videoclips
 
 
-# ── helpers ──────────────────────────────────────────────────────────────────
+def _run(cmd):
+    subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
 
-def _make_audio(text: str, path: str) -> float:
-    """Synthesise speech with gTTS, save to *path*, return duration (s)."""
+
+def _make_audio(text: str, path: str):
     tts = gTTS(text=text, lang="en", slow=False)
     tts.save(path)
-    # Measure duration via moviepy (no extra dep needed)
-    clip = AudioFileClip(path)
-    duration = clip.duration
-    clip.close()
-    return duration
 
 
-def _build_scene_clip(image_path: str, audio_path: str, duration: float):
-    """Return a video clip: still image for *duration* seconds + audio."""
-    audio = AudioFileClip(audio_path)
-    video = ImageClip(image_path, duration=duration)
-    # moviepy v2.x uses with_* instead of set_*
-    try:
-        video = video.with_audio(audio).with_fps(24)
-    except AttributeError:
-        # moviepy v1.x fallback
-        video = video.set_audio(audio).set_fps(24)
-    return video
+def _speedup_audio(src, dst, speed=1.25):
+    _run([
+        "ffmpeg",
+        "-y",
+        "-i", src,
+        "-filter:a", f"atempo={speed}",
+        dst
+    ])
 
 
-# ── public entry point ────────────────────────────────────────────────────────
+def _get_audio_duration(path):
+    result = subprocess.check_output([
+        "ffprobe",
+        "-v", "error",
+        "-show_entries", "format=duration",
+        "-of", "default=noprint_wrappers=1:nokey=1",
+        path
+    ])
+    return float(result.strip())
+
+
+def _build_scene_clip(image, audio, duration, output):
+    _run([
+        "ffmpeg",
+        "-y",
+        "-loop", "1",
+        "-i", image,
+        "-i", audio,
+        "-c:v", "libx264",
+        "-t", str(duration),
+        "-pix_fmt", "yuv420p",
+        "-vf", "fps=24",
+        "-shortest",
+        output
+    ])
+
 
 def generate_video(
-    storyboard_json_path: str = "storyboard_log.json",
-    output_path: str = "output_video.mp4",
-    tmp_dir: str = "tmp_audio",
-) -> str:
-    """
-    Read the *latest* storyboard version from *storyboard_json_path*, generate
-    a voiceover for each scene, and concatenate everything into *output_path*.
+    storyboard_json_path="storyboard_log.json",
+    output_path="output_video.mp4",
+    tmp_dir="tmp"
+):
 
-    Returns the absolute path to the produced video file.
-    """
-
-    # ── Load storyboard ───────────────────────────────────────────────────────
     with open(storyboard_json_path, encoding="utf-8") as f:
         versions = json.load(f)
 
-    # The JSON is a list of versions; take the latest entry
     latest = versions[-1]
     scenes = latest["scenes"]
 
     if not scenes:
-        raise ValueError("No scenes found in storyboard — nothing to render.")
+        raise ValueError("No scenes found in storyboard.")
 
-    print(f"\n[VideoGen] Found {len(scenes)} scene(s). Starting render…\n")
-
-    # ── Temporary folder for audio files ─────────────────────────────────────
     os.makedirs(tmp_dir, exist_ok=True)
 
-    clips = []
+    clip_paths = []
 
     for scene in scenes:
-        scene_id   = scene["scene_id"]
-        script     = scene["script"]
-        image_path = scene["image"]  # e.g. "images/scene_1.png"
+        scene_id = scene["scene_id"]
+        script = scene["script"]
+        image = scene["image"]
 
-        if not os.path.isfile(image_path):
-            raise FileNotFoundError(
-                f"Image not found for Scene {scene_id}: {image_path}"
-            )
+        raw_audio = os.path.join(tmp_dir, f"scene_{scene_id}_raw.mp3")
+        fast_audio = os.path.join(tmp_dir, f"scene_{scene_id}.mp3")
+        clip_path = os.path.join(tmp_dir, f"clip_{scene_id}.mp4")
 
-        print(f"  Scene {scene_id} — synthesising voiceover…")
-        audio_path = os.path.join(tmp_dir, f"scene_{scene_id}.mp3")
-        duration   = _make_audio(script, audio_path)
-        print(f"  Scene {scene_id} — audio duration: {duration:.1f}s")
+        print(f"Scene {scene_id} → generating speech")
+        _make_audio(script, raw_audio)
 
-        print(f"  Scene {scene_id} — building clip from {image_path}…")
-        clip = _build_scene_clip(image_path, audio_path, duration)
-        clips.append(clip)
-        print(f"  Scene {scene_id} — clip ready.\n")
+        print(f"Scene {scene_id} → speeding audio")
+        _speedup_audio(raw_audio, fast_audio, 1.25)
 
-    # ── Concatenate all clips ─────────────────────────────────────────────────
-    print("[VideoGen] Concatenating clips…")
-    final = concatenate_videoclips(clips, method="compose")
+        duration = _get_audio_duration(fast_audio)
 
-    print(f"[VideoGen] Writing video → {output_path}")
-    final.write_videofile(
-        output_path,
-        codec="libx264",
-        audio_codec="aac",
-        temp_audiofile="tmp_final_audio.m4a",
-        remove_temp=True,
-        logger=None,        # suppress moviepy's verbose progress bar
-    )
+        print(f"Scene {scene_id} → building clip")
+        _build_scene_clip(image, fast_audio, duration, clip_path)
 
-    # ── Cleanup ───────────────────────────────────────────────────────────────
-    for clip in clips:
-        clip.close()
-    final.close()
+        clip_paths.append(clip_path)
+
+    concat_file = os.path.join(tmp_dir, "concat.txt")
+
+    with open(concat_file, "w") as f:
+        for clip in clip_paths:
+            f.write(f"file '{os.path.abspath(clip)}'\n")
+
+    print("Concatenating clips")
+
+    _run([
+        "ffmpeg",
+        "-y",
+        "-f", "concat",
+        "-safe", "0",
+        "-i", concat_file,
+        "-c", "copy",
+        output_path
+    ])
 
     abs_path = os.path.abspath(output_path)
-    print(f"\n[VideoGen] ✅ Done!  Video saved to: {abs_path}\n")
+    print(f"\nVideo saved → {abs_path}\n")
+
     return abs_path
