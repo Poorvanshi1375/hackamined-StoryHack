@@ -20,3 +20,10 @@ class SceneEdit(BaseModel):
     script: str
     visual_description: str
     duration: int
+
+
+class SummarySchema(BaseModel):
+    summary: str = Field(description="Concise summary of the document's key ideas")
+    core_focus: str = Field(
+        description="The single main concept the explainer video should emphasize"
+    )

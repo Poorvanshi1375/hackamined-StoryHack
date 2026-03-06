@@ -108,3 +108,74 @@ export async function setSceneVersion(sceneId, version) {
     }
     return res.json()
 }
+
+
+// ── Summary stage ─────────────────────────────────────────────────────────────
+
+/**
+ * Upload a document file and generate a summary + core focus.
+ * @param {File} file
+ * @param {string} levelOfExplanation  'basic' | 'detailed' | 'expert'
+ * @returns {{ summary: string, core_focus: string }}
+ */
+export async function generateSummary(file, levelOfExplanation = 'basic') {
+    const form = new FormData()
+    form.append('file', file)
+    form.append('level_of_explanation', levelOfExplanation)
+
+    const res = await fetch(`${BASE}/summary/generate`, {
+        method: 'POST',
+        body: form,
+    })
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }))
+        throw new Error(err.detail ?? 'Summary generation failed')
+    }
+    return res.json() // { summary, core_focus }
+}
+
+/**
+ * Refine the summary using a natural-language instruction.
+ * @param {string} summary
+ * @param {string} coreFocus
+ * @param {string} editRequest
+ * @returns {{ summary: string, core_focus: string }}
+ */
+export async function refineSummary(summary, coreFocus, editRequest) {
+    const res = await fetch(`${BASE}/summary/refine`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ summary, core_focus: coreFocus, edit_request: editRequest }),
+    })
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }))
+        throw new Error(err.detail ?? 'Summary refinement failed')
+    }
+    return res.json() // { summary, core_focus }
+}
+
+/**
+ * Approve the summary and trigger scene generation.
+ * @param {string} document  Raw document text (stored server-side after /generate)
+ * @param {string} summary
+ * @param {string} coreFocus
+ * @param {string} levelOfExplanation
+ * @returns {{ scenes, images }}
+ */
+export async function approveSummary(document, summary, coreFocus, levelOfExplanation = 'basic') {
+    const res = await fetch(`${BASE}/summary/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            document,
+            summary,
+            core_focus: coreFocus,
+            level_of_explanation: levelOfExplanation,
+        }),
+    })
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }))
+        throw new Error(err.detail ?? 'Approve summary failed')
+    }
+    return res.json() // { scenes, images }
+}

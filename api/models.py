@@ -55,3 +55,24 @@ class SceneVersionsResponse(BaseModel):
 class SceneStateResponse(BaseModel):
     # keys are stringified scene_ids (JSON only allows string keys)
     versions: Dict[str, int]
+
+
+# ── Summary stage models ─────────────────────────────────────────────────────
+
+
+class SummaryResponse(BaseModel):
+    summary: str
+    core_focus: str
+
+
+class RefineSummaryRequest(BaseModel):
+    summary: str
+    core_focus: str
+    edit_request: str
+
+
+class ApproveSummaryRequest(BaseModel):
+    document: str
+    summary: str
+    core_focus: str
+    level_of_explanation: str = "basic"

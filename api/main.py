@@ -31,7 +31,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from api.routes import pipeline, scenes, video
+from api.routes import pipeline, scenes, video, summary
 
 app = FastAPI(
     title="StoryHack API",
@@ -58,6 +58,7 @@ app.mount("/images", StaticFiles(directory=images_dir), name="images")
 app.include_router(pipeline.router)
 app.include_router(scenes.router)
 app.include_router(video.router)
+app.include_router(summary.router)
 
 
 # ── 5. Root health check ─────────────────────────────────────────────────────

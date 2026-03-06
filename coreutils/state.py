@@ -12,6 +12,8 @@ class Scene(TypedDict):
 class VideoState(TypedDict):
     document: str
     summary: str
+    core_focus: str
+    summary_edit_request: Optional[str]
     scenes: List[Scene]
     images: Dict[int, str]
     edit_request: str

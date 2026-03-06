@@ -2,16 +2,90 @@ import json
 from langchain_groq import ChatGroq
 from langchain_core.prompts import PromptTemplate
 from state import VideoState
-from prompts import SCENE_GENERATION_PROMPT, GROUNDING_PROMPT, EDIT_PROMPT
+from prompts import (
+    SUMMARY_GENERATION_PROMPT,
+    SUMMARY_EDIT_PROMPT,
+    SCENE_GENERATION_PROMPT,
+    GROUNDING_PROMPT,
+    EDIT_PROMPT,
+)
 from image_gen import generate_image
-from schemas import SceneList, SceneEdit
+from schemas import SceneList, SceneEdit, SummarySchema
 from logger import log_storyboard_version
 from video_gen import generate_video
 
 llm = ChatGroq(
     model="openai/gpt-oss-120b",  # VALID GROQ MODELS: llama3-70b-8192, llama3-8b-8192, mixtral-8x7b-32768
-    temperature=0.3
+    temperature=0.3,
 )
+
+
+# ── Summary stage ─────────────────────────────────────────────────────────────
+
+
+def summary_generation_agent(state: VideoState) -> VideoState:
+    print("\n[0/4] Summary generation started...")
+    structured_llm = llm.with_structured_output(SummarySchema, method="json_mode")
+
+    prompt = PromptTemplate.from_template(SUMMARY_GENERATION_PROMPT)
+
+    chain = prompt | structured_llm
+
+    response = chain.invoke({"document": state["document"]})
+
+    state["summary"] = response.summary
+    state["core_focus"] = response.core_focus
+
+    print("[0/4] Summary generation complete.")
+    return state
+
+
+def summary_hitl_agent(state: VideoState) -> VideoState:
+    print("\n------ Document Summary & Core Focus ------\n")
+    print("Summary:")
+    print(state["summary"])
+    print("\nCore Focus:")
+    print(state["core_focus"])
+
+    choice = input(
+        "\nApprove this summary and core focus? "
+        "Enter 0 to approve, or describe a refinement: "
+    ).strip()
+
+    if choice == "0" or choice == "":
+        state["summary_edit_request"] = None
+    else:
+        state["summary_edit_request"] = choice
+
+    return state
+
+
+def summary_edit_agent(state: VideoState) -> VideoState:
+    print("\n[Summary Edit] Refining summary and core focus...")
+    structured_llm = llm.with_structured_output(SummarySchema, method="json_mode")
+
+    prompt = PromptTemplate.from_template(SUMMARY_EDIT_PROMPT)
+
+    chain = prompt | structured_llm
+
+    response = chain.invoke(
+        {
+            "summary": state["summary"],
+            "core_focus": state["core_focus"],
+            "summary_edit_request": state["summary_edit_request"],
+        }
+    )
+
+    state["summary"] = response.summary
+    state["core_focus"] = response.core_focus
+    state["summary_edit_request"] = None  # clear so hitl can loop cleanly
+
+    print("[Summary Edit] Summary and core focus updated.")
+    return state
+
+
+# ── Existing pipeline agents ──────────────────────────────────────────────────
+
 
 def scene_generation_agent(state: VideoState) -> VideoState:
     print("\n[1/4] Scene generation started...")
@@ -21,10 +95,14 @@ def scene_generation_agent(state: VideoState) -> VideoState:
 
     chain = prompt | structured_llm
 
-    response = chain.invoke({
-        "document": state["document"],
-        "level_of_explanation": state.get("level_of_explanation", "basic")
-    })
+    response = chain.invoke(
+        {
+            "document": state["document"],
+            "summary": state.get("summary", ""),
+            "core_focus": state.get("core_focus", ""),
+            "level_of_explanation": state.get("level_of_explanation", "basic"),
+        }
+    )
 
     state["scenes"] = [scene.model_dump() for scene in response.scenes]
 
@@ -40,10 +118,9 @@ def grounding_agent(state: VideoState) -> VideoState:
 
     chain = prompt | structured_llm
 
-    response = chain.invoke({
-        "document": state["document"],
-        "scenes": json.dumps(state["scenes"], indent=2)
-    })
+    response = chain.invoke(
+        {"document": state["document"], "scenes": json.dumps(state["scenes"], indent=2)}
+    )
 
     state["scenes"] = [scene.model_dump() for scene in response.scenes]
 
@@ -57,10 +134,7 @@ def image_generation_agent(state: VideoState) -> VideoState:
 
     for scene in state["scenes"]:
         print(f"      Generating image for Scene {scene['scene_id']}...")
-        img = generate_image(
-            scene["visual_description"],
-            scene["scene_id"]
-        )
+        img = generate_image(scene["visual_description"], scene["scene_id"])
         images[scene["scene_id"]] = img
         print(f"      Scene {scene['scene_id']} image saved → {img}")
 
@@ -84,7 +158,9 @@ def hitl_agent(state: VideoState) -> VideoState:
         print("Visual   :", scene["visual_description"])
         print("Image    :", state["images"].get(scene["scene_id"], "N/A"))
 
-    scene_id = int(input("\nEnter scene number to edit (0 to approve all & generate video): "))
+    scene_id = int(
+        input("\nEnter scene number to edit (0 to approve all & generate video): ")
+    )
 
     if scene_id == 0:
         # Generate the final video before finishing
@@ -113,11 +189,7 @@ def edit_agent(state: VideoState) -> VideoState:
     scene_id = state["edit_scene_id"]
     print(f"\n[Edit] Editing Scene {scene_id}...")
 
-    scene = next(
-        (s for s in state["scenes"]
-        if s["scene_id"] == scene_id),
-        None
-    )
+    scene = next((s for s in state["scenes"] if s["scene_id"] == scene_id), None)
 
     if scene is None:
         print(f"[edit_agent] Scene {scene_id} not found — skipping edit.")
@@ -130,22 +202,18 @@ def edit_agent(state: VideoState) -> VideoState:
 
     chain = prompt | structured_llm
 
-    response = chain.invoke({
-        "scene": json.dumps(scene, indent=2),
-        "edit_request": state["edit_request"]
-    })
+    response = chain.invoke(
+        {"scene": json.dumps(scene, indent=2), "edit_request": state["edit_request"]}
+    )
 
-    updated_scene = response.model_dump()  # Fix #2: .dict() → .model_dump()
+    updated_scene = response.model_dump()
 
     for i, s in enumerate(state["scenes"]):
         if s["scene_id"] == scene_id:
             state["scenes"][i] = updated_scene
             break
 
-    img = generate_image(
-        updated_scene["visual_description"],
-        scene_id
-    )
+    img = generate_image(updated_scene["visual_description"], scene_id)
 
     state["images"][scene_id] = img
 
