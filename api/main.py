@@ -60,6 +60,13 @@ app.include_router(scenes.router)
 app.include_router(video.router)
 app.include_router(summary.router)
 
+from tts import SUPPORTED_VOICES
+
+
+@app.get("/voices", tags=["voices"])
+async def get_voices():
+    return {"voices": SUPPORTED_VOICES}
+
 
 # ── 5. Root health check ─────────────────────────────────────────────────────
 @app.get("/", tags=["health"])

@@ -72,6 +72,7 @@ async def start_pipeline(
     state_store.pipeline_state.clear()
     state_store.active_scene_versions.clear()
     state_store.scene_version_counter.clear()
+    state_store.scene_voices.clear()
     state_store.pipeline_state.update(
         {
             "document": document_text,
@@ -190,6 +191,8 @@ async def approve_storyboard(body: ApproveRequest):
         video_path = generate_video(
             active_versions=state_store.active_scene_versions or None,
             selected_scenes=body.selected_scenes,
+            scene_voices=state_store.scene_voices or None,
+            version_data=state_store.scene_version_data or None,
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Video generation failed: {exc}")

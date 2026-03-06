@@ -1,53 +1,3 @@
-# import base64
-# import os
-# from openai import OpenAI
-# from dotenv import load_dotenv
-
-# load_dotenv()
-
-# client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-# GLOBAL_STYLE = """
-# clean scientific infographic style,
-# minimal colors,
-# professional academic presentation,
-# consistent visual theme
-# """
-
-
-# def generate_image(prompt, scene_id):
-#     print(f"      Calling OpenAI image API for scene {scene_id}...")
-
-#     full_prompt = f"{GLOBAL_STYLE}. {prompt}"
-
-#     try:
-#         result = client.images.generate(
-#             model="gpt-image-1",
-#             prompt=full_prompt,
-#             size="1024x1024"
-#         )
-#     except Exception as e:
-#         print(f"      [ERROR] OpenAI image API call failed: {e}")
-#         raise
-
-#     image_base64 = result.data[0].b64_json
-
-#     if image_base64 is None:
-#         print("      [ERROR] b64_json is None — gpt-image-1 may have returned a URL instead.")
-#         print("      Try switching to dall-e-3 which is more widely available.")
-#         raise ValueError(f"No base64 image returned for scene {scene_id}. Full response: {result}")
-
-#     image_bytes = base64.b64decode(image_base64)
-
-#     path = f"scene_{scene_id}.png"
-
-#     with open(path, "wb") as f:
-#         f.write(image_bytes)
-
-#     return path
-
-
-import base64
 import os
 import requests
 import time
@@ -73,29 +23,66 @@ headers = {
 
 
 def generate_image(prompt, scene_id):
-    print(f"      Calling HuggingFace image API for scene {scene_id}...")
+    print(f"\n[IMAGE GEN] Scene {scene_id}")
+    print("[STEP 1] Preparing prompt")
 
     full_prompt = f"{GLOBAL_STYLE}. {prompt}"
+    print("[PROMPT]", full_prompt)
 
-    payload = {
-        "inputs": full_prompt
-    }
+    payload = {"inputs": full_prompt}
 
-    while True:
-        r = requests.post(API_URL, headers=headers, json=payload)
+    retries = 0
+    max_retries = 10
+
+    while retries < max_retries:
+        try:
+            print(f"[STEP 2] Sending request to HuggingFace (attempt {retries+1})")
+
+            r = requests.post(
+                API_URL,
+                headers=headers,
+                json=payload,
+                timeout=120
+            )
+
+            print("[STEP 3] Response received")
+            print("[STATUS CODE]", r.status_code)
+
+        except requests.exceptions.Timeout:
+            print("[ERROR] Request timed out")
+            retries += 1
+            continue
+
+        except Exception as e:
+            print("[ERROR] Request failed:", e)
+            retries += 1
+            continue
 
         if r.status_code == 503:
-            print("      Model loading...")
+            print("[MODEL STATUS] Model loading on HuggingFace...")
+            retries += 1
             time.sleep(8)
             continue
 
         if r.status_code != 200:
-            print(f"      [ERROR] HuggingFace API failed: {r.text}")
+            print("[ERROR] HuggingFace API error:", r.text)
             raise Exception(r.text)
 
+        print("[STEP 4] Writing image file")
+
         path = f"images/scene_{scene_id}.png"
+
+        os.makedirs("images", exist_ok=True)
 
         with open(path, "wb") as f:
             f.write(r.content)
 
+        print("[SUCCESS] Image saved:", path)
+
         return path
+
+    raise Exception("HuggingFace model failed after multiple retries")
+
+
+if __name__ == "__main__":
+    generate_image("A cat sitting on a windowsill", 1)

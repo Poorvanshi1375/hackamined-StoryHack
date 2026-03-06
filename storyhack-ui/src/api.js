@@ -116,6 +116,37 @@ export async function setSceneVersion(sceneId, version) {
     return res.json()
 }
 
+/**
+ * Fetch supported TTS voices.
+ * @returns {{ voices: string[] }}
+ */
+export async function getVoices() {
+    const res = await fetch(`${BASE}/voices`)
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }))
+        throw new Error(err.detail ?? 'Failed to fetch voices')
+    }
+    return res.json()
+}
+
+/**
+ * Set the TTS voice for a scene.
+ * @param {number} sceneId 
+ * @param {string} voice 
+ */
+export async function setSceneVoice(sceneId, voice) {
+    const res = await fetch(`${BASE}/scenes/${sceneId}/voice`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ voice }),
+    })
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }))
+        throw new Error(err.detail ?? 'Failed to set voice')
+    }
+    return res.json()
+}
+
 
 // ── Summary stage ─────────────────────────────────────────────────────────────
 

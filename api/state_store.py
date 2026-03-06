@@ -12,3 +12,6 @@ scene_version_counter: dict = {}
 # Stores scene content (title, script, visual_description, duration) per version
 # Structure: {scene_id: {version: {title, script, visual_description, duration}}}
 scene_version_data: dict = {}
+
+# Tracks the selected voice per scene — key: scene_id (int), value: voice_name (str)
+scene_voices: dict = {}

@@ -4,6 +4,8 @@ import {
   getSceneVersions,
   setSceneVersion,
   imageUrl,
+  getVoices,
+  setSceneVoice,
 } from "../api.js";
 
 export default function SceneCard({ scene, onUpdated, isSelected, onToggle }) {
@@ -11,8 +13,19 @@ export default function SceneCard({ scene, onUpdated, isSelected, onToggle }) {
   const [editing, setEditing] = useState(false);
   const [editError, setEditError] = useState("");
 
+  const [voices, setVoices] = useState([]);
+  const [selectedVoice, setSelectedVoice] = useState("en-US-AriaNeural"); // Default
   const [previewState, setPreviewState] = useState("idle"); // idle | loading | playing
   const audioRef = useRef(null);
+
+  // Fetch voices once
+  useEffect(() => {
+    getVoices()
+      .then((data) => {
+        if (data.voices) setVoices(data.voices);
+      })
+      .catch(console.error);
+  }, []);
 
   async function handlePreviewAudio() {
     if (previewState !== "idle") return; // Prevent multiple clicks
@@ -260,6 +273,35 @@ export default function SceneCard({ scene, onUpdated, isSelected, onToggle }) {
           <p className="text-sm text-gray-600 leading-relaxed border-l-2 border-blue-200 pl-3">
             {vContent.script}
           </p>
+
+          <div className="flex items-center gap-2 mt-1">
+            <span className="text-xs text-gray-500 font-medium">VOICE:</span>
+            <select
+              value={selectedVoice}
+              onChange={async (e) => {
+                const v = e.target.value;
+                setSelectedVoice(v);
+                try {
+                  await setSceneVoice(scene.scene_id, v);
+                } catch (err) {
+                  console.error("Voice set error", err);
+                }
+              }}
+              disabled={voices.length === 0}
+              className="text-xs border border-gray-200 rounded px-2 py-1 bg-white text-gray-700 outline-none focus:border-indigo-400 font-medium cursor-pointer"
+            >
+              {voices.map((v) => (
+                <option key={v} value={v}>
+                  {v
+                    .replace("en-US-", "")
+                    .replace("en-GB-", "")
+                    .replace("Neural", "")}{" "}
+                  ({v})
+                </option>
+              ))}
+            </select>
+          </div>
+
           <button
             onClick={handlePreviewAudio}
             disabled={previewState !== "idle"}

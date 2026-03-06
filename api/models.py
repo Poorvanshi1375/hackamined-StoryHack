@@ -44,6 +44,10 @@ class SetVersionRequest(BaseModel):
     version: int
 
 
+class SetVoiceRequest(BaseModel):
+    voice: str
+
+
 class SceneVersionContent(BaseModel):
     title: str
     script: str

@@ -3,12 +3,13 @@ import glob
 import json
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
-from gtts import gTTS
+from tts import generate_tts_audio, DEFAULT_VOICE, SUPPORTED_VOICES
 
 from api.models import (
     EditRequest,
     SceneOut,
     SetVersionRequest,
+    SetVoiceRequest,
     SceneVersionsResponse,
     SceneStateResponse,
     SceneVersionContent,
@@ -111,6 +112,20 @@ async def set_scene_version(scene_id: int, body: SetVersionRequest):
     return {"scene_id": scene_id, "active_version": body.version}
 
 
+# ── POST /scenes/{scene_id}/voice ─────────────────────────────────────────────
+
+
+@router.post("/{scene_id}/voice")
+async def set_scene_voice(scene_id: int, body: SetVoiceRequest):
+    """Set the TTS voice for a specific scene."""
+    if body.voice not in SUPPORTED_VOICES:
+        raise HTTPException(status_code=400, detail=f"Unsupported voice: {body.voice}")
+
+    state_store.scene_voices[scene_id] = body.voice
+    print(f"[API] Scene {scene_id} voice → {body.voice}")
+    return {"scene_id": scene_id, "voice": body.voice}
+
+
 # ── POST /scenes/{scene_id}/edit ──────────────────────────────────────────────
 
 
@@ -209,21 +224,42 @@ async def get_preview_audio(scene_id: int):
     if not logs:
         raise HTTPException(status_code=404, detail="No storyboard versions exist.")
 
-    # Get the most recent log entry (they are appended, so last one is usually newest, or sort by version)
-    latest_log = max(logs, key=lambda x: x.get("version", 0))
-    scenes = latest_log.get("scenes", [])
-
     # 2. Find narration text
-    target_scene = next((s for s in scenes if s.get("scene_id") == scene_id), None)
-    if not target_scene:
-        raise HTTPException(
-            status_code=404, detail=f"Scene {scene_id} not found in latest storyboard."
+    narration = None
+
+    # Try in-memory state store first for the active version
+    active_version = state_store.active_scene_versions.get(scene_id)
+    if active_version:
+        scene_data = state_store.scene_version_data.get(scene_id, {}).get(
+            active_version
+        )
+        if scene_data and scene_data.get("script"):
+            narration = scene_data["script"]
+
+    # Fallback to storyboard_log.json
+    if not narration:
+        target_log = None
+        if active_version:
+            target_log = next(
+                (v for v in logs if v.get("version") == active_version), None
+            )
+
+        if not target_log:
+            target_log = max(logs, key=lambda x: x.get("version", 0))
+
+        scenes_list = target_log.get("scenes", [])
+        target_scene = next(
+            (s for s in scenes_list if s.get("scene_id") == scene_id), None
         )
 
-    narration = target_scene.get("script")
-    # Some older schemas might have used 'narration', check if script is empty
-    if not narration and "narration" in target_scene:
-        narration = target_scene.get("narration")
+        if not target_scene:
+            raise HTTPException(
+                status_code=404, detail=f"Scene {scene_id} not found in storyboard."
+            )
+
+        narration = target_scene.get("script")
+        if not narration and "narration" in target_scene:
+            narration = target_scene.get("narration")
 
     if not narration or not str(narration).strip():
         raise HTTPException(
@@ -254,8 +290,8 @@ async def get_preview_audio(scene_id: int):
 
     # 5. Generate speech
     try:
-        tts = gTTS(text=str(narration), lang="en", slow=False)
-        tts.save(filepath)
+        voice = state_store.scene_voices.get(scene_id, DEFAULT_VOICE)
+        generate_tts_audio(str(narration), filepath, voice)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate audio: {e}")
 
