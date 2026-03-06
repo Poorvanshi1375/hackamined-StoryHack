@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   editScene,
   getSceneVersions,
@@ -10,6 +10,69 @@ export default function SceneCard({ scene, onUpdated, isSelected, onToggle }) {
   const [editText, setEditText] = useState("");
   const [editing, setEditing] = useState(false);
   const [editError, setEditError] = useState("");
+
+  const [previewState, setPreviewState] = useState("idle"); // idle | loading | playing
+  const audioRef = useRef(null);
+
+  async function handlePreviewAudio() {
+    if (previewState !== "idle") return; // Prevent multiple clicks
+
+    setPreviewState("loading");
+    try {
+      const BASE_API = "http://localhost:8000";
+      const response = await fetch(
+        `${BASE_API}/scenes/${scene.scene_id}/preview-audio`,
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to generate audio");
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audioRef.current = audio;
+
+      audio.onended = () => setPreviewState("idle");
+      audio.onerror = () => setPreviewState("idle");
+
+      setPreviewState("playing");
+      await audio.play();
+    } catch (err) {
+      console.error("Preview audio error:", err);
+      setPreviewState("idle");
+    }
+  }
+
+  async function handlePreviewAudio() {
+    if (previewState !== "idle") return; // Prevent multiple clicks
+
+    setPreviewState("loading");
+    try {
+      const BASE_API = "http://localhost:8000";
+      const response = await fetch(
+        `${BASE_API}/scenes/${scene.scene_id}/preview-audio`,
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to generate audio");
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audioRef.current = audio;
+
+      audio.onended = () => setPreviewState("idle");
+      audio.onerror = () => setPreviewState("idle");
+
+      setPreviewState("playing");
+      await audio.play();
+    } catch (err) {
+      console.error("Preview audio error:", err);
+      setPreviewState("idle");
+    }
+  }
 
   // Version state
   const [availableVersions, setAvailableVersions] = useState([]);
@@ -193,9 +256,26 @@ export default function SceneCard({ scene, onUpdated, isSelected, onToggle }) {
         </h3>
 
         {/* ── Script ── */}
-        <p className="text-sm text-gray-600 leading-relaxed border-l-2 border-blue-200 pl-3">
-          {vContent.script}
-        </p>
+        <div className="flex flex-col gap-2">
+          <p className="text-sm text-gray-600 leading-relaxed border-l-2 border-blue-200 pl-3">
+            {vContent.script}
+          </p>
+          <button
+            onClick={handlePreviewAudio}
+            disabled={previewState !== "idle"}
+            className={`self-start flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-full transition-all border ${
+              previewState === "loading"
+                ? "bg-yellow-50 text-yellow-600 border-yellow-200 cursor-wait shadow-sm"
+                : previewState === "playing"
+                  ? "bg-green-50 text-green-600 border-green-200 shadow-inner"
+                  : "bg-indigo-50 text-indigo-600 border-indigo-200 hover:bg-indigo-100 hover:text-indigo-700 active:scale-95 shadow-sm"
+            }`}
+          >
+            {previewState === "idle" && "🔊 Preview Audio"}
+            {previewState === "loading" && "⏳ Generating..."}
+            {previewState === "playing" && "▶ Playing"}
+          </button>
+        </div>
 
         {/* ── Visual description (collapsible) ── */}
         <details className="text-xs text-gray-400 cursor-pointer">

@@ -1,7 +1,9 @@
 import os
 import glob
-
+import json
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse
+from gtts import gTTS
 
 from api.models import (
     EditRequest,
@@ -183,3 +185,79 @@ async def edit_scene(scene_id: int, body: EditRequest):
         duration=updated_scene["duration"],
         image=new_path,
     )
+
+
+# ── GET /scenes/{scene_id}/preview-audio ──────────────────────────────────────
+
+
+@router.get("/{scene_id}/preview-audio")
+async def get_preview_audio(scene_id: int):
+    """Generate and return text-to-speech audio for a scene's narration."""
+    # 1. Load storyboard_log.json
+    log_path = "storyboard_log.json"
+    if not os.path.exists(log_path):
+        raise HTTPException(status_code=500, detail="Storyboard log not found.")
+
+    try:
+        with open(log_path, "r", encoding="utf-8") as f:
+            logs = json.load(f)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to parse storyboard log: {e}"
+        )
+
+    if not logs:
+        raise HTTPException(status_code=404, detail="No storyboard versions exist.")
+
+    # Get the most recent log entry (they are appended, so last one is usually newest, or sort by version)
+    latest_log = max(logs, key=lambda x: x.get("version", 0))
+    scenes = latest_log.get("scenes", [])
+
+    # 2. Find narration text
+    target_scene = next((s for s in scenes if s.get("scene_id") == scene_id), None)
+    if not target_scene:
+        raise HTTPException(
+            status_code=404, detail=f"Scene {scene_id} not found in latest storyboard."
+        )
+
+    narration = target_scene.get("script")
+    # Some older schemas might have used 'narration', check if script is empty
+    if not narration and "narration" in target_scene:
+        narration = target_scene.get("narration")
+
+    if not narration or not str(narration).strip():
+        raise HTTPException(
+            status_code=400, detail=f"Scene {scene_id} has no narration text."
+        )
+
+    # 3. Create audio directory
+    audio_dir = "tmp_preview_audio"
+    os.makedirs(audio_dir, exist_ok=True)
+
+    # 4. Determine version number
+    pattern = os.path.join(audio_dir, f"scene_{scene_id}_v*.mp3")
+    existing_files = glob.glob(pattern)
+
+    highest_version = 0
+    for f in existing_files:
+        try:
+            # Extract version from filename 'scene_1_v2.mp3'
+            v_str = os.path.basename(f).split("_v")[-1].replace(".mp3", "")
+            if v_str.isdigit():
+                highest_version = max(highest_version, int(v_str))
+        except Exception:
+            pass
+
+    new_version = highest_version + 1
+    filename = f"scene_{scene_id}_v{new_version}.mp3"
+    filepath = os.path.join(audio_dir, filename)
+
+    # 5. Generate speech
+    try:
+        tts = gTTS(text=str(narration), lang="en", slow=False)
+        tts.save(filepath)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate audio: {e}")
+
+    # 6. Return the file
+    return FileResponse(filepath, media_type="audio/mpeg", filename=filename)

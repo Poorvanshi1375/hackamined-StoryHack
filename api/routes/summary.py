@@ -27,6 +27,20 @@ router = APIRouter(prefix="/summary", tags=["summary"])
 UPLOADS_DIR = "uploads"
 
 
+def clear_temp_dirs():
+    folders = ["images", "tmp", "tmp_audio", "tmp_preview_audio"]
+
+    for folder in folders:
+        if not os.path.isdir(folder):
+            continue
+
+        for f in os.listdir(folder):
+            path = os.path.join(folder, f)
+
+            if os.path.isfile(path):
+                os.remove(path)
+
+
 # ── POST /summary/generate ────────────────────────────────────────────────────
 
 
@@ -125,6 +139,7 @@ async def approve_summary(body: ApproveSummaryRequest):
     from logger import clear_log
 
     clear_log()
+    clear_temp_dirs()
     # Resolve document: use server-cached version if frontend sent empty string
     document = body.document or state_store.pipeline_state.get("document", "")
     level = body.level_of_explanation or state_store.pipeline_state.get(
