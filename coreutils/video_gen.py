@@ -139,7 +139,7 @@ def generate_video(
         generate_tts_audio(script, raw_audio, voice)
 
         print(f"Scene {scene_id} → speeding audio")
-        _speedup_audio(raw_audio, fast_audio, 1.25)
+        _speedup_audio(raw_audio, fast_audio, 1.00)
 
         duration = _get_audio_duration(fast_audio)
 
