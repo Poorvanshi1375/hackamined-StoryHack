@@ -25,7 +25,6 @@ consistent visual language,
 no photorealism, no complex textures, no artistic painting
 """
 
-# ENDPOINT_ID = "qwen-image-t2i-lora"
 ENDPOINT_ID = "z-image-turbo"
 
 runpod.api_key = RUNPOD_API_KEY
@@ -194,6 +193,17 @@ Detailed visual description:
 
         if status in ["FAILED", "CANCELLED"]:
             print(f"[ERROR] RunPod job failed with status: {status}")
+            try:
+                print("[RUNPOD DEBUG] Fetching error output...")
+                error_output = job.output()
+                print("[RUNPOD ERROR OUTPUT]")
+                print(error_output)
+                print("[RAW JOB OUTPUT]")
+                print(job)
+            except Exception as e:
+                print("[RUNPOD ERROR OUTPUT FETCH FAILED]")
+                print(e)
+
             raise Exception("RunPod job failed")
 
         time.sleep(2)
