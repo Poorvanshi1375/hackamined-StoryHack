@@ -1,88 +1,144 @@
+import base64
 import os
-import requests
 import time
+import runpod
 from dotenv import load_dotenv
+import requests
 
 load_dotenv()
 
-HF_API_KEY = os.getenv("HF_API_KEY")
+RUNPOD_API_KEY = os.getenv("RUNPOD_API_KEY")
 
 GLOBAL_STYLE = """
-clean scientific infographic style,
-minimal colors,
-professional academic presentation,
-consistent visual theme
+flat vector infographic,
+modern explainer video style,
+clean technical diagram,
+minimalist presentation slide design,
+simple geometric shapes, arrows and icons,
+limited color palette (blue, teal, white, gray),
+high readability,
+white background,
+professional educational infographic,
+consistent visual language,
+no photorealism, no complex textures, no artistic painting
 """
 
-API_URL = "https://router.huggingface.co/hf-inference/models/stabilityai/stable-diffusion-xl-base-1.0"
+ENDPOINT_ID = "qwen-image-t2i-lora"
 
-headers = {
-    "Authorization": f"Bearer {HF_API_KEY}",
-    "Content-Type": "application/json"
-}
+runpod.api_key = RUNPOD_API_KEY
 
 
 def generate_image(prompt, scene_id):
     print(f"\n[IMAGE GEN] Scene {scene_id}")
+
     print("[STEP 1] Preparing prompt")
+    full_prompt = f"""
+    {GLOBAL_STYLE}
 
-    full_prompt = f"{GLOBAL_STYLE}. {prompt}"
-    print("[PROMPT]", full_prompt)
+    Scene description:
+    {prompt}
+    """
 
-    payload = {"inputs": full_prompt}
+    payload = {
+        "prompt": full_prompt,
+        "size": "1024*1024",
+        "seed": -1,
+        "enable_safety_checker": True
+    }
 
-    retries = 0
-    max_retries = 10
+    print("[STEP 2] Creating RunPod endpoint object")
+    endpoint = runpod.Endpoint(ENDPOINT_ID)
 
-    while retries < max_retries:
+    print("[STEP 3] Submitting job to RunPod")
+    start_time = time.time()
+
+    job = endpoint.run({"input": payload})
+
+    print(f"[STEP 4] Job submitted successfully")
+    print(f"[JOB ID] {job.job_id}")
+
+    poll_count = 0
+
+    print("[STEP 5] Polling job status")
+
+    while True:
+        poll_count += 1
+
         try:
-            print(f"[STEP 2] Sending request to HuggingFace (attempt {retries+1})")
-
-            r = requests.post(
-                API_URL,
-                headers=headers,
-                json=payload,
-                timeout=120
-            )
-
-            print("[STEP 3] Response received")
-            print("[STATUS CODE]", r.status_code)
-
-        except requests.exceptions.Timeout:
-            print("[ERROR] Request timed out")
-            retries += 1
-            continue
-
+            status = job.status()
         except Exception as e:
-            print("[ERROR] Request failed:", e)
-            retries += 1
-            continue
+            print(f"[ERROR] Failed to fetch job status: {e}")
+            raise
 
-        if r.status_code == 503:
-            print("[MODEL STATUS] Model loading on HuggingFace...")
-            retries += 1
-            time.sleep(8)
-            continue
+        elapsed = round(time.time() - start_time, 2)
 
-        if r.status_code != 200:
-            print("[ERROR] HuggingFace API error:", r.text)
-            raise Exception(r.text)
+        print(
+            f"[POLL {poll_count}] Status: {status} | Elapsed: {elapsed}s"
+        )
 
-        print("[STEP 4] Writing image file")
+        if status == "COMPLETED":
+            print("[STEP 6] Job completed. Fetching output...")
 
-        path = f"images/scene_{scene_id}.png"
+            try:
+                result = job.output()
+            except Exception as e:
+                print(f"[ERROR] Failed to fetch job output: {e}")
+                raise
 
-        os.makedirs("images", exist_ok=True)
+            print("[STEP 7] Output received")
+            print(f"[OUTPUT TYPE] {type(result)}")
 
-        with open(path, "wb") as f:
-            f.write(r.content)
+            if isinstance(result, list):
+                print("[FORMAT] List detected")
+                image_bytes = base64.b64decode(result[0])
 
-        print("[SUCCESS] Image saved:", path)
+            elif isinstance(result, dict) and "image" in result:
+                print("[FORMAT] Dict with 'image'")
+                image_bytes = base64.b64decode(result["image"])
 
-        return path
+            elif isinstance(result, dict) and "images" in result:
+                print("[FORMAT] Dict with 'images'")
+                image_bytes = base64.b64decode(result["images"][0])
 
-    raise Exception("HuggingFace model failed after multiple retries")
+            elif isinstance(result, dict) and "result" in result:
+                print("[FORMAT] URL result detected")
+                img_url = result["result"]
+                print(f"[STEP 8] Downloading image from URL: {img_url}")
+                image_bytes = requests.get(img_url).content
+
+            else:
+                print("[ERROR] Unexpected RunPod output format")
+                print(result)
+                raise Exception(f"Unexpected RunPod output format")
+
+            print("[STEP 9] Preparing filesystem")
+
+            os.makedirs("images", exist_ok=True)
+
+            path = f"images/scene_{scene_id}.png"
+
+            print(f"[STEP 10] Writing image to disk → {path}")
+
+            with open(path, "wb") as f:
+                f.write(image_bytes)
+
+            total_time = round(time.time() - start_time, 2)
+
+            print(f"[SUCCESS] Scene {scene_id} image saved")
+            print(f"[TOTAL TIME] {total_time}s")
+
+            return path
+
+        if status in ["FAILED", "CANCELLED"]:
+            print(f"[ERROR] RunPod job failed with status: {status}")
+            raise Exception(f"RunPod job failed")
+
+        time.sleep(2)
 
 
 if __name__ == "__main__":
-    generate_image("A cat sitting on a windowsill", 1)
+    print("[TEST] Starting standalone image generation test")
+
+    generate_image("A cat sitting on a table", 1)
+
+    print("[TEST] Script finished")
