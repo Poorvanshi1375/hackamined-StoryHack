@@ -10,7 +10,7 @@ def _run(cmd):
     )
 
 
-def _speedup_audio(src, dst, speed=1.25):
+def _speedup_audio(src, dst, speed=1.00):
     _run(["ffmpeg", "-y", "-i", src, "-filter:a", f"atempo={speed}", dst])
 
 
