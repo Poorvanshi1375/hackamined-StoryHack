@@ -58,7 +58,7 @@ Create a storyboard for a short explainer video that is specifically aligned wit
 This is the user's explanation style: {level_of_explanation}.
 
 Rules:
-- Decide the number of scenes dynamically (MAXIMUM ALLOWED SCENES: 3)
+- Decide the number of scenes dynamically (MAXIMUM ALLOWED SCENES: 2)
 - Each scene must contain:
     scene_id
     title
@@ -72,7 +72,7 @@ Every scene must reinforce the core focus: {core_focus}
 Respond in JSON using this exact structure:
 {{"scenes": [{{"scene_id": 1, "title": "...", "script": "...", "visual_description": "...", "duration": 30}}]}}
 
-NOTE: MAXIMUM SCENES ALLOWED: 3
+NOTE: MAXIMUM SCENES ALLOWED: 2
 """
 
 
