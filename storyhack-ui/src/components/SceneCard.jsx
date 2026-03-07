@@ -32,7 +32,7 @@ export default function SceneCard({
   const [editError, setEditError] = useState("");
 
   const [voices, setVoices] = useState([]);
-  const [previewState, setPreviewState] = useState("idle"); // idle | loading | playing
+  const [previewState, setPreviewState] = useState("idle"); // idle | loading | playing | paused
   const audioRef = useRef(null);
 
   // Fetch available voices once
@@ -45,25 +45,53 @@ export default function SceneCard({
   }, []);
 
   async function handlePreviewAudio() {
-    if (previewState !== "idle") return;
-    setPreviewState("loading");
     try {
-      const response = await fetch(
-        `${BASE_API}/scenes/${scene.scene_id}/preview-audio`,
-      );
-      if (!response.ok) throw new Error("Failed to generate audio");
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      audioRef.current = audio;
-      audio.onended = () => setPreviewState("idle");
-      audio.onerror = () => setPreviewState("idle");
-      setPreviewState("playing");
-      await audio.play();
+      if (!audioRef.current) {
+        setPreviewState("loading");
+
+        const response = await fetch(
+          `${BASE_API}/scenes/${scene.scene_id}/preview-audio`,
+        );
+
+        if (!response.ok) throw new Error("Failed to generate audio");
+
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+
+        const audio = new Audio(url);
+
+        audio.onended = () => setPreviewState("idle");
+        audio.onerror = () => setPreviewState("idle");
+
+        audioRef.current = audio;
+
+        await audio.play();
+        setPreviewState("playing");
+
+        return;
+      }
+
+      const audio = audioRef.current;
+
+      if (audio.paused) {
+        await audio.play();
+        setPreviewState("playing");
+      } else {
+        audio.pause();
+        setPreviewState("paused");
+      }
     } catch (err) {
       console.error("Preview audio error:", err);
       setPreviewState("idle");
     }
+  }
+
+  function restartAudio() {
+    if (!audioRef.current) return;
+
+    audioRef.current.currentTime = 0;
+    audioRef.current.play();
+    setPreviewState("playing");
   }
 
   // ── Version state ──────────────────────────────────────────────────────────
@@ -281,23 +309,28 @@ export default function SceneCard({
                 </svg>
               </div>
             </div>
-            <button
-              onClick={handlePreviewAudio}
-              disabled={previewState !== "idle"}
-              className={`flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-lg border transition-all text-sm shadow-sm
-                ${
-                  previewState === "loading"
-                    ? "bg-yellow-50 text-yellow-600 border-yellow-200 cursor-wait"
-                    : previewState === "playing"
-                      ? "bg-green-50 text-green-600 border-green-200"
-                      : "bg-white text-blue-600 border-gray-200 hover:bg-blue-50 hover:border-blue-300 active:scale-95"
-                }`}
-              title="Preview Audio"
-            >
-              {previewState === "idle" && "🔊"}
-              {previewState === "loading" && "⏳"}
-              {previewState === "playing" && "▶"}
-            </button>
+            <div className="flex items-center gap-2">
+              {/* Play / Pause */}
+              <button
+                onClick={handlePreviewAudio}
+                className="w-9 h-9 flex items-center justify-center rounded-lg border shadow-sm
+      bg-white text-blue-600 border-gray-200 hover:bg-blue-50"
+              >
+                {previewState === "loading" && "⏳"}
+                {previewState === "playing" && "⏸"}
+                {(previewState === "paused" || previewState === "idle") && "▶"}
+              </button>
+
+              {/* Restart */}
+              <button
+                onClick={restartAudio}
+                disabled={!audioRef.current}
+                className="w-9 h-9 flex items-center justify-center rounded-lg border shadow-sm
+      bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+              >
+                ⟲
+              </button>
+            </div>
           </div>
         </div>
 

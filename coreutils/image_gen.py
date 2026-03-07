@@ -23,7 +23,8 @@ consistent visual language,
 no photorealism, no complex textures, no artistic painting
 """
 
-ENDPOINT_ID = "qwen-image-t2i-lora"
+# ENDPOINT_ID = "qwen-image-t2i-lora"
+ENDPOINT_ID = "z-image-turbo"
 
 runpod.api_key = RUNPOD_API_KEY
 
