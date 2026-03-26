@@ -12,6 +12,7 @@ from api.models import (
     StoryboardResponse,
 )
 from api import state_store
+from api.routes._helpers import run_scene_pipeline, version_initial_scenes
 
 router = APIRouter(prefix="/pipeline", tags=["pipeline"])
 
@@ -46,8 +47,7 @@ async def start_pipeline(
     Upload a document and run the full initial storyboard pipeline:
     scene_generation → grounding → image_generation.
     """
-    # Lazy import so coreutils path is already set by the time we import
-    from agents import scene_generation_agent, grounding_agent, image_generation_agent
+    # Lazy imports so coreutils path is already set by the time we import
     from main import load_document
     from logger import clear_log
 
@@ -86,40 +86,14 @@ async def start_pipeline(
     )
 
     # ── Run pipeline agents ─────────────────────────────────────────────────
-    try:
-        state = scene_generation_agent(state_store.pipeline_state)
-        print("[API] Scenes generated")
-
-        state = grounding_agent(state)
-        print("[API] Scenes grounded")
-
-        state = image_generation_agent(state)
-        print("[API] Images generated")
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Pipeline error: {exc}")
-
+    state = run_scene_pipeline(state_store.pipeline_state)
     state_store.pipeline_state.update(state)
 
     # ── Rename initial images + record v1 content per scene ──────────────────
-    for scene in state_store.pipeline_state["scenes"]:
-        sid = scene["scene_id"]
-        raw_path = state_store.pipeline_state["images"].get(
-            sid, f"images/scene_{sid}.png"
-        )
-        v1_path = f"images/scene_{sid}_v1.png"
-        if os.path.isfile(raw_path) and raw_path != v1_path:
-            os.rename(raw_path, v1_path)
-        state_store.pipeline_state["images"][sid] = v1_path
-        state_store.active_scene_versions[sid] = 1
-        state_store.scene_version_counter[sid] = 1
-        # Store the v1 scene content so the UI can show it when reverting
-        state_store.scene_version_data.setdefault(sid, {})[1] = {
-            "title": scene["title"],
-            "script": scene["script"],
-            "visual_description": scene["visual_description"],
-            "duration": scene["duration"],
-        }
-        print(f"[API] Scene {sid} → {v1_path} (v1)")
+    version_initial_scenes(
+        state_store.pipeline_state["scenes"],
+        state_store.pipeline_state["images"],
+    )
 
     scenes_out = _scenes_with_images(
         state_store.pipeline_state["scenes"],

@@ -86,6 +86,31 @@ Avoid storytelling. Only describe what should visually appear in the image. Do o
         return scene_prompt
 
 
+def _decode_runpod_output(result) -> bytes:
+    """Decode a RunPod job output into raw image bytes, handling all known response formats."""
+    if isinstance(result, list):
+        print("[FORMAT] List detected")
+        return base64.b64decode(result[0])
+
+    if isinstance(result, dict):
+        if "image" in result:
+            print("[FORMAT] Dict with 'image'")
+            return base64.b64decode(result["image"])
+
+        if "images" in result:
+            print("[FORMAT] Dict with 'images'")
+            return base64.b64decode(result["images"][0])
+
+        if "result" in result:
+            img_url = result["result"]
+            print(f"[FORMAT] URL result detected — downloading from {img_url}")
+            return requests.get(img_url).content
+
+    print("[ERROR] Unexpected RunPod output format")
+    print(result)
+    raise Exception("Unexpected RunPod output format")
+
+
 def generate_image(prompt, scene_id):
     print(f"\n[IMAGE GEN] Scene {scene_id}")
 
@@ -150,36 +175,15 @@ Detailed visual description:
             print("[STEP 8] Output received")
             print(f"[OUTPUT TYPE] {type(result)}")
 
-            if isinstance(result, list):
-                print("[FORMAT] List detected")
-                image_bytes = base64.b64decode(result[0])
+            image_bytes = _decode_runpod_output(result)
 
-            elif isinstance(result, dict) and "image" in result:
-                print("[FORMAT] Dict with 'image'")
-                image_bytes = base64.b64decode(result["image"])
-
-            elif isinstance(result, dict) and "images" in result:
-                print("[FORMAT] Dict with 'images'")
-                image_bytes = base64.b64decode(result["images"][0])
-
-            elif isinstance(result, dict) and "result" in result:
-                print("[FORMAT] URL result detected")
-                img_url = result["result"]
-                print(f"[STEP 9] Downloading image from URL: {img_url}")
-                image_bytes = requests.get(img_url).content
-
-            else:
-                print("[ERROR] Unexpected RunPod output format")
-                print(result)
-                raise Exception(f"Unexpected RunPod output format")
-
-            print("[STEP 10] Preparing filesystem")
+            print("[STEP 9] Preparing filesystem")
 
             os.makedirs("images", exist_ok=True)
 
             path = f"images/scene_{scene_id}.png"
 
-            print(f"[STEP 11] Writing image to disk → {path}")
+            print(f"[STEP 10] Writing image to disk → {path}")
 
             with open(path, "wb") as f:
                 f.write(image_bytes)

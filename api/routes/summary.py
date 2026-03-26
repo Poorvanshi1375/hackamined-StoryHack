@@ -21,6 +21,7 @@ from api.models import (
     SummaryResponse,
 )
 from api import state_store
+from api.routes._helpers import run_scene_pipeline, version_initial_scenes
 
 router = APIRouter(prefix="/summary", tags=["summary"])
 
@@ -135,7 +136,6 @@ async def approve_summary(body: ApproveSummaryRequest):
     scene_generation → grounding → image_generation.
     Returns the same shape as POST /pipeline/start.
     """
-    from agents import scene_generation_agent, grounding_agent, image_generation_agent
     from logger import clear_log
 
     clear_log()
@@ -165,33 +165,14 @@ async def approve_summary(body: ApproveSummaryRequest):
         }
     )
 
-    try:
-        state = scene_generation_agent(state_store.pipeline_state)
-        state = grounding_agent(state)
-        state = image_generation_agent(state)
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Pipeline error: {exc}")
-
+    state = run_scene_pipeline(state_store.pipeline_state)
     state_store.pipeline_state.update(state)
 
-    # Version the initial images (same logic as /pipeline/start)
-    for scene in state_store.pipeline_state["scenes"]:
-        sid = scene["scene_id"]
-        raw_path = state_store.pipeline_state["images"].get(
-            sid, f"images/scene_{sid}.png"
-        )
-        v1_path = f"images/scene_{sid}_v1.png"
-        if os.path.isfile(raw_path) and raw_path != v1_path:
-            os.rename(raw_path, v1_path)
-        state_store.pipeline_state["images"][sid] = v1_path
-        state_store.active_scene_versions[sid] = 1
-        state_store.scene_version_counter[sid] = 1
-        state_store.scene_version_data.setdefault(sid, {})[1] = {
-            "title": scene["title"],
-            "script": scene["script"],
-            "visual_description": scene["visual_description"],
-            "duration": scene["duration"],
-        }
+    # Version the initial images
+    version_initial_scenes(
+        state_store.pipeline_state["scenes"],
+        state_store.pipeline_state["images"],
+    )
 
     scenes_out = [
         SceneOut(

@@ -1,6 +1,21 @@
 const BASE = 'http://localhost:8000'
 
 /**
+ * Shared fetch helper — throws a descriptive Error on non-2xx responses.
+ * @param {string} url
+ * @param {RequestInit} [options]
+ * @param {string} [fallbackMessage]
+ */
+async function apiFetch(url, options = {}, fallbackMessage = 'Request failed') {
+    const res = await fetch(url, options)
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }))
+        throw new Error(err.detail ?? fallbackMessage)
+    }
+    return res.json()
+}
+
+/**
  * Upload a document file and kick off the full initial pipeline.
  * @param {File} file
  * @param {string} levelOfExplanation  'basic' | 'detailed' | 'expert'
@@ -9,30 +24,14 @@ export async function startPipeline(file, levelOfExplanation = 'basic') {
     const form = new FormData()
     form.append('file', file)
     form.append('level_of_explanation', levelOfExplanation)
-
-    const res = await fetch(`${BASE}/pipeline/start`, {
-        method: 'POST',
-        body: form,
-    })
-
-    if (!res.ok) {
-        const err = await res.json().catch(() => ({ detail: res.statusText }))
-        throw new Error(err.detail ?? 'Pipeline start failed')
-    }
-
-    return res.json() // { scenes, images }
+    return apiFetch(`${BASE}/pipeline/start`, { method: 'POST', body: form }, 'Pipeline start failed')
 }
 
 /**
  * Fetch the latest storyboard from storyboard_log.json on the server.
  */
 export async function getStoryboard() {
-    const res = await fetch(`${BASE}/pipeline/storyboard`)
-    if (!res.ok) {
-        const err = await res.json().catch(() => ({ detail: res.statusText }))
-        throw new Error(err.detail ?? 'Failed to fetch storyboard')
-    }
-    return res.json() // { version, label, timestamp, scenes }
+    return apiFetch(`${BASE}/pipeline/storyboard`, {}, 'Failed to fetch storyboard')
 }
 
 /**
@@ -41,18 +40,15 @@ export async function getStoryboard() {
  * @param {string} editRequest  Natural-language edit instruction
  */
 export async function editScene(sceneId, editRequest) {
-    const res = await fetch(`${BASE}/scenes/${sceneId}/edit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ edit_request: editRequest }),
-    })
-
-    if (!res.ok) {
-        const err = await res.json().catch(() => ({ detail: res.statusText }))
-        throw new Error(err.detail ?? 'Edit failed')
-    }
-
-    return res.json() // updated SceneOut
+    return apiFetch(
+        `${BASE}/scenes/${sceneId}/edit`,
+        {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ edit_request: editRequest }),
+        },
+        'Edit failed',
+    )
 }
 
 /**
@@ -62,16 +58,15 @@ export async function editScene(sceneId, editRequest) {
  * @param {Array<number>} selectedScenes
  */
 export async function generateVideo(scenes, images, selectedScenes) {
-    const res = await fetch(`${BASE}/pipeline/approve`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scenes, images, selected_scenes: selectedScenes }),
-    })
-    if (!res.ok) {
-        const err = await res.json().catch(() => ({ detail: res.statusText }))
-        throw new Error(err.detail ?? 'Video generation failed')
-    }
-    return res.json() // { video_path }
+    return apiFetch(
+        `${BASE}/pipeline/approve`,
+        {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ scenes, images, selected_scenes: selectedScenes }),
+        },
+        'Video generation failed',
+    )
 }
 
 /** Direct URL for the rendered video stream / download. */
@@ -90,12 +85,7 @@ export function imageUrl(path) {
  * @returns {{ scene_id, available_versions, active_version }}
  */
 export async function getSceneVersions(sceneId) {
-    const res = await fetch(`${BASE}/scenes/${sceneId}/versions`)
-    if (!res.ok) {
-        const err = await res.json().catch(() => ({ detail: res.statusText }))
-        throw new Error(err.detail ?? 'Failed to fetch versions')
-    }
-    return res.json()
+    return apiFetch(`${BASE}/scenes/${sceneId}/versions`, {}, 'Failed to fetch versions')
 }
 
 /**
@@ -104,16 +94,15 @@ export async function getSceneVersions(sceneId) {
  * @param {number} version
  */
 export async function setSceneVersion(sceneId, version) {
-    const res = await fetch(`${BASE}/scenes/${sceneId}/set-version`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ version }),
-    })
-    if (!res.ok) {
-        const err = await res.json().catch(() => ({ detail: res.statusText }))
-        throw new Error(err.detail ?? 'Failed to set version')
-    }
-    return res.json()
+    return apiFetch(
+        `${BASE}/scenes/${sceneId}/set-version`,
+        {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ version }),
+        },
+        'Failed to set version',
+    )
 }
 
 /**
@@ -121,30 +110,24 @@ export async function setSceneVersion(sceneId, version) {
  * @returns {{ voices: string[] }}
  */
 export async function getVoices() {
-    const res = await fetch(`${BASE}/voices`)
-    if (!res.ok) {
-        const err = await res.json().catch(() => ({ detail: res.statusText }))
-        throw new Error(err.detail ?? 'Failed to fetch voices')
-    }
-    return res.json()
+    return apiFetch(`${BASE}/voices`, {}, 'Failed to fetch voices')
 }
 
 /**
  * Set the TTS voice for a scene.
- * @param {number} sceneId 
- * @param {string} voice 
+ * @param {number} sceneId
+ * @param {string} voice
  */
 export async function setSceneVoice(sceneId, voice) {
-    const res = await fetch(`${BASE}/scenes/${sceneId}/voice`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ voice }),
-    })
-    if (!res.ok) {
-        const err = await res.json().catch(() => ({ detail: res.statusText }))
-        throw new Error(err.detail ?? 'Failed to set voice')
-    }
-    return res.json()
+    return apiFetch(
+        `${BASE}/scenes/${sceneId}/voice`,
+        {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ voice }),
+        },
+        'Failed to set voice',
+    )
 }
 
 
@@ -160,16 +143,7 @@ export async function generateSummary(file, levelOfExplanation = 'basic') {
     const form = new FormData()
     form.append('file', file)
     form.append('level_of_explanation', levelOfExplanation)
-
-    const res = await fetch(`${BASE}/summary/generate`, {
-        method: 'POST',
-        body: form,
-    })
-    if (!res.ok) {
-        const err = await res.json().catch(() => ({ detail: res.statusText }))
-        throw new Error(err.detail ?? 'Summary generation failed')
-    }
-    return res.json() // { summary, core_focus }
+    return apiFetch(`${BASE}/summary/generate`, { method: 'POST', body: form }, 'Summary generation failed')
 }
 
 /**
@@ -180,16 +154,15 @@ export async function generateSummary(file, levelOfExplanation = 'basic') {
  * @returns {{ summary: string, core_focus: string }}
  */
 export async function refineSummary(summary, coreFocus, editRequest) {
-    const res = await fetch(`${BASE}/summary/refine`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ summary, core_focus: coreFocus, edit_request: editRequest }),
-    })
-    if (!res.ok) {
-        const err = await res.json().catch(() => ({ detail: res.statusText }))
-        throw new Error(err.detail ?? 'Summary refinement failed')
-    }
-    return res.json() // { summary, core_focus }
+    return apiFetch(
+        `${BASE}/summary/refine`,
+        {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ summary, core_focus: coreFocus, edit_request: editRequest }),
+        },
+        'Summary refinement failed',
+    )
 }
 
 /**
@@ -201,19 +174,18 @@ export async function refineSummary(summary, coreFocus, editRequest) {
  * @returns {{ scenes, images }}
  */
 export async function approveSummary(document, summary, coreFocus, levelOfExplanation = 'basic') {
-    const res = await fetch(`${BASE}/summary/approve`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            document,
-            summary,
-            core_focus: coreFocus,
-            level_of_explanation: levelOfExplanation,
-        }),
-    })
-    if (!res.ok) {
-        const err = await res.json().catch(() => ({ detail: res.statusText }))
-        throw new Error(err.detail ?? 'Approve summary failed')
-    }
-    return res.json() // { scenes, images }
+    return apiFetch(
+        `${BASE}/summary/approve`,
+        {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                document,
+                summary,
+                core_focus: coreFocus,
+                level_of_explanation: levelOfExplanation,
+            }),
+        },
+        'Approve summary failed',
+    )
 }

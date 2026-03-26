@@ -11,6 +11,7 @@ import UploadPanel from "./components/UploadPanel.jsx";
 import SummaryReview from "./components/SummaryReview.jsx";
 import StoryboardView from "./components/StoryboardView.jsx";
 import VideoPanel from "./components/VideoPanel.jsx";
+import LoadingSpinner from "./components/LoadingSpinner.jsx";
 
 // Stages: 'upload' | 'summary' | 'scenes' | 'video'
 const STAGES = {
@@ -215,15 +216,7 @@ export default function App() {
             <UploadPanel onGenerate={handleUpload} loading={loadingSummary} />
             {loadingSummary && (
               <div className="bg-white rounded-xl border border-gray-200 p-8 flex flex-col items-center gap-3">
-                <svg
-                  className="w-8 h-8 text-purple-400 spin"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path strokeLinecap="round" d="M12 3a9 9 0 1 0 9 9" />
-                </svg>
+                <LoadingSpinner color="text-purple-400" />
                 <p className="text-sm font-semibold text-gray-700">
                   Analysing document…
                 </p>
@@ -258,15 +251,7 @@ export default function App() {
             )}
             {loadingScenes && (
               <div className="bg-white rounded-xl border border-gray-200 p-8 flex flex-col items-center gap-3">
-                <svg
-                  className="w-8 h-8 text-blue-400 spin"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path strokeLinecap="round" d="M12 3a9 9 0 1 0 9 9" />
-                </svg>
+                <LoadingSpinner />
                 <p className="text-sm font-semibold text-gray-700">
                   Generating storyboard…
                 </p>
@@ -310,15 +295,7 @@ export default function App() {
               >
                 {generatingVideo ? (
                   <span className="flex items-center gap-2">
-                    <svg
-                      className="w-3.5 h-3.5 spin"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth={3}
-                    >
-                      <path strokeLinecap="round" d="M12 3a9 9 0 1 0 9 9" />
-                    </svg>
+                    <LoadingSpinner size="w-3.5 h-3.5" />
                     Rendering…
                   </span>
                 ) : (

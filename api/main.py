@@ -18,6 +18,7 @@ Usage:
 
 import os
 import sys
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 # ── 1. Fix CWD and sys.path BEFORE any coreutils import ─────────────────────
@@ -31,12 +32,24 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from api.routes import pipeline, scenes, video, summary
+from api.routes import pipeline, scenes, video, summary, voices
+
+
+@asynccontextmanager
+async def lifespan(app):
+    print(f"[API] Server ready — CWD: {os.getcwd()}")
+    print(
+        "[API] Endpoints: /pipeline/start, /pipeline/storyboard, /pipeline/approve,"
+        " /scenes/{id}/edit, /video"
+    )
+    yield
+
 
 app = FastAPI(
     title="StoryHack API",
     description="Thin HTTP wrapper over the AI video pipeline.",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 # CORS — open for hackathon; restrict to your React origin in production
@@ -59,25 +72,10 @@ app.include_router(pipeline.router)
 app.include_router(scenes.router)
 app.include_router(video.router)
 app.include_router(summary.router)
-
-from tts import SUPPORTED_VOICES
-
-
-@app.get("/voices", tags=["voices"])
-async def get_voices():
-    return {"voices": SUPPORTED_VOICES}
+app.include_router(voices.router)
 
 
 # ── 5. Root health check ─────────────────────────────────────────────────────
 @app.get("/", tags=["health"])
 async def root():
     return {"status": "ok", "message": "StoryHack API is running"}
-
-
-# ── 6. Startup log ───────────────────────────────────────────────────────────
-@app.on_event("startup")
-async def on_startup():
-    print(f"[API] Server ready — CWD: {os.getcwd()}")
-    print(
-        f"[API] Endpoints: /pipeline/start, /pipeline/storyboard, /pipeline/approve, /scenes/{{id}}/edit, /video"
-    )

@@ -1,5 +1,4 @@
 import json
-from langchain_groq import ChatGroq
 from langchain_core.prompts import PromptTemplate
 from state import VideoState
 from prompts import (
@@ -13,11 +12,7 @@ from image_gen import generate_image
 from schemas import SceneList, SceneEdit, SummarySchema
 from logger import log_storyboard_version
 from video_gen import generate_video
-
-llm = ChatGroq(
-    model="openai/gpt-oss-120b",  # VALID GROQ MODELS: llama3-70b-8192, llama3-8b-8192, mixtral-8x7b-32768
-    temperature=0.3,
-)
+from llm import llm
 
 
 # ── Summary stage ─────────────────────────────────────────────────────────────
